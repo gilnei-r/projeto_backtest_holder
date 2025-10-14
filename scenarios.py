@@ -130,32 +130,48 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
             # ------------------------------------
 
             if valores_ativos:
-                ativo_menor_valor = min(valores_ativos, key=valores_ativos.get)
-                portfolio_mensal.loc[dia, 'Ativo Aportado'] = ativo_menor_valor
-                preco = data_historica.loc[dia, ('Close', ativo_menor_valor)]
-                if pd.notna(preco) and preco > 0:
-                    num_shares[ativo_menor_valor] += aporte_corrigido / preco
+                # --- Lógica de Seleção e Aporte Dividido ---
+                
+                # Ordena os ativos elegíveis pelo seu valor total em carteira (do menor para o maior)
+                ativos_ordenados = sorted(valores_ativos, key=valores_ativos.get)
+                
+                # Seleciona os 'n' primeiros, ou menos se não houver 'n' ativos elegíveis
+                num_a_selecionar = config.NUMERO_EMPRESAS_POR_APORTE
+                ativos_selecionados = ativos_ordenados[:num_a_selecionar]
 
-                # --- Lógica de Gatilho do Freio ---
-                if config.FREIO_ATIVO:
-                    aportes_recentes[ativo_menor_valor].append(dia)
+                if ativos_selecionados:
+                    # Divide o aporte igualmente entre os ativos selecionados
+                    aporte_por_ativo = aporte_corrigido / len(ativos_selecionados)
                     
-                    # Remove aportes mais antigos que o período de verificação
-                    limite_tempo = dia - pd.DateOffset(months=config.FREIO_PERIODO_APORTES)
-                    aportes_recentes[ativo_menor_valor] = [
-                        d for d in aportes_recentes[ativo_menor_valor] if d >= limite_tempo
-                    ]
+                    # Registra os tickers que receberão aporte
+                    portfolio_mensal.loc[dia, 'Ativo Aportado'] = ",".join(ativos_selecionados)
 
-                    if len(aportes_recentes[ativo_menor_valor]) > 1:
-                        print(f"  FREIO ATIVADO para {ativo_menor_valor} em {dia.strftime('%Y-%m-%d')}.")
-                        
-                        # Define a data de fim da quarentena
-                        fim_quarentena = dia + pd.DateOffset(months=quarentena_duracao[ativo_menor_valor])
-                        quarentena[ativo_menor_valor] = fim_quarentena
-                        print(f"  Ativo em quarentena até {fim_quarentena.strftime('%Y-%m-%d')}.")
+                    # Itera sobre os ativos selecionados para fazer o aporte e aplicar o freio
+                    for ticker in ativos_selecionados:
+                        preco = data_historica.loc[dia, ('Close', ticker)]
+                        if pd.notna(preco) and preco > 0:
+                            num_shares[ticker] += aporte_por_ativo / preco
 
-                        # Aumenta a próxima duração da quarentena para este ativo
-                        quarentena_duracao[ativo_menor_valor] += config.FREIO_QUARENTENA_ADICIONAL
+                        # --- Lógica de Gatilho do Freio (aplicada individualmente) ---
+                        if config.FREIO_ATIVO:
+                            aportes_recentes[ticker].append(dia)
+                            
+                            # Remove aportes mais antigos que o período de verificação
+                            limite_tempo = dia - pd.DateOffset(months=config.FREIO_PERIODO_APORTES)
+                            aportes_recentes[ticker] = [
+                                d for d in aportes_recentes[ticker] if d >= limite_tempo
+                            ]
+
+                            if len(aportes_recentes[ticker]) > 1:
+                                print(f"  FREIO ATIVADO para {ticker} em {dia.strftime('%Y-%m-%d')}.")
+                                
+                                # Define a data de fim da quarentena
+                                fim_quarentena = dia + pd.DateOffset(months=quarentena_duracao[ticker])
+                                quarentena[ticker] = fim_quarentena
+                                print(f"  Ativo em quarentena até {fim_quarentena.strftime('%Y-%m-%d')}.")
+
+                                # Aumenta a próxima duração da quarentena para este ativo
+                                quarentena_duracao[ticker] += config.FREIO_QUARENTENA_ADICIONAL
         
         if selic_diaria is not None and dia in selic_diaria.index:
             valor_selic *= selic_diaria.loc[dia]
