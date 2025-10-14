@@ -36,7 +36,7 @@ TICKERS_EMPRESAS = [
     'B3SA3.SA', 'CCRO3.SA', 'CGRA3.SA', 'CIEL3.SA', 'CMIG3.SA', 'CVCB3.SA',
     'EGIE3.SA', 'ENBR3.SA', 'EQTL3.SA', 'ESTC3.SA', 'EZTC3.SA', 'FLRY3.SA',
     'GRND3.SA', 'HGTX3.SA', 'HYPE3.SA', 'IRBR3.SA', 'ITSA3.SA', 'ITUB3.SA',
-    'KROT3.SA', 'LEVE3.SA', 'LINX3.SA', 'LREN3.SA', 'MDIA3.SA', 'MPLU3.SA',
+    'COGN3.SA', 'LEVE3.SA', 'LINX3.SA', 'LREN3.SA', 'MDIA3.SA', 'MPLU3.SA',
     'MULT3.SA', 'NATU3.SA', 'ODPV3.SA', 'PETR3.SA', 'PSSA3.SA', 'PTBL3.SA',
     'QUAL3.SA', 'RADL3.SA', 'RENT3.SA', 'SAPR3.SA', 'SBSP3.SA', 'SEER3.SA',
     'SNSL3.SA', 'TAEE3.SA', 'TIET3.SA', 'TOTS3.SA', 'UGPA3.SA', 'VALE3.SA',
@@ -66,7 +66,7 @@ APORTE_MENSAL_BASE = 1000.0
 # Número de empresas em que o aporte mensal será dividido.
 # O valor será dividido igualmente entre as 'n' empresas de menor valor na carteira.
 # Se for 1, o comportamento é o original (aporta tudo na empresa de menor valor).
-NUMERO_EMPRESAS_POR_APORTE = 3
+NUMERO_EMPRESAS_POR_APORTE = 2/
 
 
 # --- Configuração de Saída ---

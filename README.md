@@ -4,7 +4,7 @@ Este projeto consiste em um script Python para realizar backtests de estratégia
 
 ## Visão Geral do Projeto
 
-O script `backtest.py` foi projetado para simular e analisar o desempenho de duas estratégias de investimento distintas em um portfólio de ações definido pelo usuário. Ele utiliza `yfinance` para baixar dados históricos de ações, `python-bcb` para buscar indicadores econômicos brasileiros (Selic e IPCA), `pandas` para análise de dados e `matplotlib` para visualizar os resultados.
+O script `main.py` foi projetado para simular e analisar o desempenho de duas estratégias de investimento distintas em um portfólio de ações definido pelo usuário. Ele utiliza `yfinance` para baixar dados históricos de ações, `python-bcb` para buscar indicadores econômicos brasileiros (Selic e IPCA), `pandas` para análise de dados e `matplotlib` para visualizar os resultados.
 
 ## Funcionalidades
 
@@ -19,6 +19,7 @@ O script executa dois cenários de backtesting distintos:
     *   Começa com um saldo zero e simula contribuições mensais regulares.
     *   O valor da contribuição começa em um valor base (por exemplo, R$ 1000) e é ajustado mensalmente pela inflação (IPCA).
     *   Cada contribuição mensal é investida em um único ativo: aquele com o menor valor monetário total na carteira no momento do investimento.
+    *   **Funcionalidade Freio de Arrumação:** Este cenário agora inclui um mecanismo de "freio de arrumação" inspirado na metodologia Bastter.com. Se um ativo receber mais de uma contribuição dentro de um período configurável, ele é colocado em "quarentena" por uma duração definida, evitando novos investimentos nele e, assim, prevenindo a concentração.
     *   Este portfólio também é comparado com a Selic, considerando as mesmas contribuições mensais.
 
 ## Instalação
@@ -40,17 +41,17 @@ O script executa dois cenários de backtesting distintos:
 
 ## Uso
 
-Para executar os backtests, execute o script `backtest.py` a partir do seu terminal:
+Para executar os backtests, execute o script `main.py` a partir do seu terminal:
 
 ```bash
-python backtest.py
+python main.py
 ```
 
 O script executará ambos os cenários sequencialmente e exibirá três janelas de plotagem no final. O console mostrará um resumo detalhado dos resultados para cada cenário, incluindo comparações com o benchmark Selic.
 
 ## Configuração
 
-Todos os parâmetros para o backtest (tickers de ações, valores de investimento, datas) são definidos no arquivo `config.py`. Para executar diferentes cenários, você precisará modificar as variáveis neste arquivo diretamente.
+Todos os parâmetros para o backtest (tickers de ações, valores de investimento, datas) são definidos no arquivo `config.py`. Isso inclui novas configurações para habilitar e ajustar o recurso de freio de arrumação (`FREIO_ATIVO`, `FREIO_PERIODO_APORTES`, `FREIO_QUARENTENA_INICIAL`, `FREIO_QUARENTENA_ADICIONAL`). Para executar diferentes cenários, você precisará modificar as variáveis neste arquivo diretamente.
 
 ## Saída
 
