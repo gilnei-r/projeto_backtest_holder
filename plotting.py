@@ -3,6 +3,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
+import pandas as pd
 
 def plot_results(lump_sum_results, monthly_results):
     """Gera e exibe os gráficos dos resultados."""
@@ -29,8 +30,14 @@ def plot_results(lump_sum_results, monthly_results):
 
     # Gráfico 3: Distribuição de Aportes Mensais
     fig3, ax3 = plt.subplots(figsize=(14, 8))
-    monthly_contributions = monthly_results['Ativo Aportado'].replace("", np.nan).resample('M').first()
-    contribution_counts = monthly_contributions.dropna().value_counts()
+    monthly_contributions = monthly_results['Ativo Aportado'].replace("", np.nan).resample('M').first().dropna()
+    
+    # Processa as entradas para lidar com múltiplos tickers por aporte
+    all_individual_contributions = []
+    for contribution_group in monthly_contributions:
+        all_individual_contributions.extend(contribution_group.split(','))
+    
+    contribution_counts = pd.Series(all_individual_contributions).value_counts()
     if not contribution_counts.empty:
         contribution_counts.plot(kind='bar', ax=ax3, color='coral')
         ax3.set_title('Quantidade de Aportes Mensais por Ativo', fontsize=18)
