@@ -17,8 +17,10 @@ Both strategies are benchmarked against Brazilian economic indicators (Selic rat
 
 ## Architecture
 
-### Single-File Design
-The entire application is contained in `backtest.py`. There are no modules, packages, or separate configuration files.
+### Two-File Design
+The application consists of two main files:
+- **`backtest.py`**: Contains all core logic, data processing, and visualization functions
+- **`config.py`**: Centralizes all configuration parameters (stocks, dates, investment amounts, automatic brake settings)
 
 ### Data Sources
 - **Stock Data**: Downloaded via `yfinance` from Yahoo Finance (Brazilian stocks with `.SA` suffix)
@@ -29,40 +31,46 @@ The entire application is contained in `backtest.py`. There are no modules, pack
 
 ### Key Data Flows
 
-1. **Configuration** (lines 54-76): All parameters hardcoded at top
-   - `empresas_input`: Space-separated ticker symbols (short form)
-   - `tickers_map`: Maps short tickers to full Yahoo Finance tickers (.SA suffix)
-   - `valor_investido_por_empresa`: Amount invested per stock (Scenario 1)
-   - `aporte_mensal_base`: Base monthly contribution amount (Scenario 2)
-   - `data_inicio`/`data_fim`: Backtest date range
+1. **Configuration** (config.py, lines 14-75): All parameters in separate config file
+   - `EMPRESAS_INPUT`: Space-separated ticker symbols (short form)
+   - `TICKERS_MAP`: Maps short tickers to full Yahoo Finance tickers (.SA suffix)
+   - `VALOR_INVESTIDO_POR_EMPRESA`: Amount invested per stock (Scenario 1)
+   - `APORTE_MENSAL_BASE`: Base monthly contribution amount (Scenario 2)
+   - `DATA_INICIO`/`DATA_FIM`: Backtest date range
+   - `FREIO_ATIVO`: Enable/disable automatic brake feature
+   - `FREIO_PERIODO_APORTES`, `FREIO_QUARENTENA_INICIAL`, `FREIO_QUARENTENA_ADICIONAL`: Brake behavior parameters
 
-2. **Data Download** (lines 77-103): Bulk download at start
+2. **Data Download** (backtest.py, lines 321-341): Bulk download at start
    - Stock data downloaded via `yf.download()` with MultiIndex columns
    - BCB series downloaded in 3-year chunks with retry logic (`download_bcb_series()`)
    - IMA-B 5+ normalized to base 100 on first day
    - Returns MultiIndex DataFrame: (metric, ticker) columns for stocks
 
-3. **Scenario 1 Processing** (lines 105-147): Lump-sum simulation
+3. **Scenario 1 Processing** (backtest.py, lines 80-122): Lump-sum simulation
    - Iterates through each valid ticker's historical data
    - Tracks shares owned (including dividend reinvestment)
    - Builds daily capital curve for entire date range
-   - Calculates Selic and IMA-B 5+ benchmarks with same initial investment
+   - Calculates Selic benchmark with same initial investment
 
-4. **Scenario 2 Processing** (lines 149-227): Monthly contributions
+4. **Scenario 2 Processing** (backtest.py, lines 124-256): Monthly contributions
    - Iterates through ALL dates (not just trading days)
    - On first day of each month (year+month tuple tracking):
      - Adjusts contribution by accumulated IPCA
-     - Identifies asset with lowest monetary value
+     - Checks automatic brake quarantine status
+     - Identifies asset with lowest monetary value (among eligible assets)
      - Invests entire contribution into that asset
+     - Activates brake if asset receives multiple contributions within configured period
    - Tracks dividend reinvestment daily
-   - Updates Selic and IMA-B 5+ benchmark values with same monthly contributions
+   - Updates Selic benchmark values with same monthly contributions
    - Forward-fills non-trading days
 
-5. **Output Generation** (lines 229-270):
-   - Excel file with monthly snapshots: `backtest_results.xlsx`
+5. **Output Generation** (backtest.py, lines 258-309):
+   - Two separate Excel files with monthly snapshots:
+     - `backtest_results_lump_sum.xlsx`: Scenario 1 results
+     - `backtest_results_monthly.xlsx`: Scenario 2 results with contribution tracking
    - Three matplotlib charts (displayed, not saved):
-     - Scenario 1 capital curve with Selic and IMA-B 5+
-     - Scenario 2 capital curve with benchmarks and total invested
+     - Scenario 1 capital curve with Selic
+     - Scenario 2 capital curve with Selic and total invested
      - Distribution of monthly contributions by asset (bar chart)
 
 ### Important Implementation Details
@@ -71,11 +79,13 @@ The entire application is contained in `backtest.py`. There are no modules, pack
 
 - **Monthly Contribution Logic** (Scenario 2): Always invests in the asset with the **lowest total monetary value** (not price), implementing a self-rebalancing strategy
 
+- **Automatic Brake Feature** (Scenario 2): Prevents portfolio concentration by tracking contributions per asset. If an asset receives more than one contribution within `FREIO_PERIODO_APORTES` months, it enters "quarentena" (quarantine) for `FREIO_QUARENTENA_INICIAL` months. Subsequent activations increase quarantine duration by `FREIO_QUARENTENA_ADICIONAL`. Controlled by `FREIO_ATIVO` flag in config.py
+
 - **IPCA Adjustment**: Monthly contributions grow with accumulated inflation: `aporte_corrigido = aporte_mensal_base * ipca_acumulado.loc[dia]`
 
 - **Month Tracking Fix**: Uses `(year, month)` tuple instead of just month to properly detect new months across years: `current_month = (dia.year, dia.month)`
 
-- **IMA-B 5+ Normalization**: Index values are normalized to start at 1.0 on the first day, then daily returns are calculated from the normalized series
+- **Data Forward-Filling**: After download, stock data is forward-filled using `.ffill()` to ensure continuity and prevent skipped contributions on non-trading days
 
 - **Date Range Handling**: Creates a complete daily date range (`pd.date_range`) then forward-fills missing trading days
 
@@ -102,20 +112,23 @@ The script will:
 
 ## Modifying Parameters
 
-All configuration is at the top of `backtest.py` (lines 54-76):
+All configuration is in `config.py`:
 
-- **Change stocks**: Edit `empresas_input` string (space-separated short tickers) and ensure mapping exists in `tickers_map`
-- **Change date range**: Modify `data_inicio` (format: "YYYY-MM-DD")
+- **Change stocks**: Edit `EMPRESAS_INPUT` string (space-separated short tickers) and ensure mapping exists in `TICKERS_MAP`
+- **Change date range**: Modify `DATA_INICIO` (format: "YYYY-MM-DD") and `DATA_FIM`
 - **Change investment amounts**:
-  - Scenario 1: `valor_investido_por_empresa` (per stock)
-  - Scenario 2: `aporte_mensal_base` (monthly contribution)
+  - Scenario 1: `VALOR_INVESTIDO_POR_EMPRESA` (per stock)
+  - Scenario 2: `APORTE_MENSAL_BASE` (monthly contribution)
+- **Configure automatic brake**:
+  - `FREIO_ATIVO`: Set to True/False to enable/disable
+  - `FREIO_PERIODO_APORTES`: Months to check for repeated contributions (default: 2)
+  - `FREIO_QUARENTENA_INICIAL`: Initial quarantine duration in months (default: 6)
+  - `FREIO_QUARENTENA_ADICIONAL`: Additional months added on subsequent activations (default: 12)
 
 ## Common Issues
 
 ### BCB Download Failures
 The `download_bcb_series()` function includes chunking (3-year periods) and retry logic (3 attempts with 2-second delays) because the BCB API is unreliable. If a chunk fails after 3 attempts, it's skipped and processing continues. The script will work with partial data if needed.
-
-**Note**: IMA-B 5+ series (12467) may not have recent data (typically ends around 2023). This is expected behavior and the script handles it gracefully.
 
 ### Ticker Mapping
 Yahoo Finance requires `.SA` suffix for Brazilian stocks (e.g., `ITUB4.SA`). The `tickers_map` dictionary handles this conversion. When adding new stocks, both the short form and full form must be added.
@@ -125,6 +138,8 @@ Yahoo Finance requires `.SA` suffix for Brazilian stocks (e.g., `ITUB4.SA`). The
 
 ## Output Files
 
-- **backtest_results.xlsx**: Contains two sheets with monthly snapshots:
-  - "Aporte Unico (Mensal)": Scenario 1 results
-  - "Aportes Mensais (Mensal)": Scenario 2 results with contribution tracking
+- **backtest_results_lump_sum.xlsx**: Scenario 1 results with monthly snapshots
+  - Sheet: "Aporte Unico (Mensal)"
+- **backtest_results_monthly.xlsx**: Scenario 2 results with monthly snapshots
+  - Sheet: "Aportes Mensais (Mensal)"
+  - Includes columns: individual stock values, Total, Selic, Total Investido, Aporte, Ativo Aportado

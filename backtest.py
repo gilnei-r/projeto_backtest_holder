@@ -124,13 +124,26 @@ def run_lump_sum_backtest(data_historica, selic_diaria, tickers_sa, data_inicio,
 def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim):
     """Executa o backtest para o cenário de Aportes Mensais."""
     print("\n\n--- CENÁRIO 2: APORTES MENSAIS CORRIGIDOS PELO IPCA ---")
+    if config.FREIO_ATIVO:
+        print("Freio automático de aportes ATIVADO.")
+
     all_dates = pd.date_range(start=data_inicio, end=data_fim, freq='D')
     valid_tickers = [col for col in tickers_sa if col in data_historica['Close'].columns and not data_historica['Close'][col].dropna().empty]
-    columns_mensal = valid_tickers + ['Total', 'Selic', 'Total Investido', 'Aporte', 'Ativo Aportado']
-    portfolio_mensal = pd.DataFrame(0.0, index=all_dates, columns=columns_mensal)
-    portfolio_mensal['Ativo Aportado'] = ""
+    
+    # Correção: Inicia colunas 'Aporte' e 'Ativo Aportado' com NaN para permitir o preenchimento (ffill)
+    columns_to_initialize_zero = valid_tickers + ['Total', 'Selic', 'Total Investido']
+    portfolio_mensal = pd.DataFrame(0.0, index=all_dates, columns=columns_to_initialize_zero)
+    portfolio_mensal['Aporte'] = np.nan
+    portfolio_mensal['Ativo Aportado'] = np.nan
+
     num_shares = {ticker: 0.0 for ticker in valid_tickers}
     ipca_acumulado = (1 + ipca_mensal).cumprod().reindex(all_dates, method='ffill').fillna(1) if ipca_mensal is not None else pd.Series(1, index=all_dates)
+
+    # --- Variáveis para o Freio Automático ---
+    aportes_recentes = {ticker: [] for ticker in valid_tickers}
+    quarentena = {ticker: None for ticker in valid_tickers}
+    quarentena_duracao = {ticker: config.FREIO_QUARENTENA_INICIAL for ticker in valid_tickers}
+    # -----------------------------------------
 
     valor_selic = 0.0
     total_investido = 0.0
@@ -140,6 +153,9 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
     for dia in all_dates:
         if dia not in data_historica.index:
             if dia > all_dates[0]:
+                # Forward-fill: propaga valores do dia anterior para dias sem negociação
+                for ticker in valid_tickers:
+                    portfolio_mensal.loc[dia, ticker] = portfolio_mensal.loc[:dia, ticker].iloc[-2] if len(portfolio_mensal.loc[:dia, ticker]) > 1 else 0
                 portfolio_mensal.loc[dia, 'Total'] = portfolio_mensal.loc[:dia, 'Total'].iloc[-2] if len(portfolio_mensal.loc[:dia, 'Total']) > 1 else 0
                 portfolio_mensal.loc[dia, 'Selic'] = valor_selic
                 portfolio_mensal.loc[dia, 'Total Investido'] = total_investido
@@ -154,7 +170,30 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
 
             portfolio_mensal.loc[dia, 'Aporte'] = aporte_corrigido
 
-            valores_ativos = {ticker: num_shares[ticker] * data_historica.loc[dia, ('Close', ticker)] for ticker in valid_tickers if pd.notna(data_historica.loc[dia, ('Close', ticker)])}
+            # --- Lógica do Freio Automático ---
+            ativos_elegiveis = valid_tickers
+            if config.FREIO_ATIVO:
+                # Libera ativos da quarentena se a data já passou
+                for ticker in quarentena:
+                    if quarentena[ticker] is not None and dia >= quarentena[ticker]:
+                        quarentena[ticker] = None
+                        print(f"  FREIO DESATIVADO para {ticker} em {dia.strftime('%Y-%m-%d')}.")
+
+                ativos_elegiveis = [
+                    ticker for ticker in valid_tickers if quarentena[ticker] is None
+                ]
+                # Se todos estiverem em quarentena, não aporta em ninguém.
+                if not ativos_elegiveis:
+                    ativos_elegiveis = []
+
+
+            valores_ativos = {
+                ticker: num_shares[ticker] * data_historica.loc[dia, ('Close', ticker)]
+                for ticker in ativos_elegiveis
+                if pd.notna(data_historica.loc[dia, ('Close', ticker)])
+            }
+            # ------------------------------------
+
             if valores_ativos:
                 ativo_menor_valor = min(valores_ativos, key=valores_ativos.get)
                 portfolio_mensal.loc[dia, 'Ativo Aportado'] = ativo_menor_valor
@@ -162,6 +201,27 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
                 if pd.notna(preco) and preco > 0:
                     num_shares[ativo_menor_valor] += aporte_corrigido / preco
 
+                # --- Lógica de Gatilho do Freio ---
+                if config.FREIO_ATIVO:
+                    aportes_recentes[ativo_menor_valor].append(dia)
+                    
+                    # Remove aportes mais antigos que o período de verificação
+                    limite_tempo = dia - pd.DateOffset(months=config.FREIO_PERIODO_APORTES)
+                    aportes_recentes[ativo_menor_valor] = [
+                        d for d in aportes_recentes[ativo_menor_valor] if d >= limite_tempo
+                    ]
+
+                    if len(aportes_recentes[ativo_menor_valor]) > 1:
+                        print(f"  FREIO ATIVADO para {ativo_menor_valor} em {dia.strftime('%Y-%m-%d')}.")
+                        
+                        # Define a data de fim da quarentena
+                        fim_quarentena = dia + pd.DateOffset(months=quarentena_duracao[ativo_menor_valor])
+                        quarentena[ativo_menor_valor] = fim_quarentena
+                        print(f"  Ativo em quarentena até {fim_quarentena.strftime('%Y-%m-%d')}.")
+
+                        # Aumenta a próxima duração da quarentena para este ativo
+                        quarentena_duracao[ativo_menor_valor] += config.FREIO_QUARENTENA_ADICIONAL
+        
         if selic_diaria is not None and dia in selic_diaria.index:
             valor_selic *= selic_diaria.loc[dia]
 
@@ -268,6 +328,10 @@ def main():
         if data_historica.empty:
             print("ERRO: Nenhum dado histórico de ações foi baixado. Verifique os tickers e o período.")
             return
+
+        # Correção: Preenche dados de preço ausentes para garantir a continuidade da simulação
+        data_historica.ffill(inplace=True)
+
     except Exception as e:
         print(f"ERRO CRÍTICO ao baixar dados do yfinance: {e}")
         return

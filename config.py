@@ -56,3 +56,20 @@ APORTE_MENSAL_BASE = 1000.0
 # Nomes dos arquivos de saída para os resultados em Excel.
 ARQUIVO_RESULTADOS_APORTE_UNICO = "backtest_results_lump_sum.xlsx"
 ARQUIVO_RESULTADOS_APORTES_MENSAIS = "backtest_results_monthly.xlsx"
+
+
+# --- Configuração do Freio Automático (Cenário 2) ---
+
+# Ativa ou desativa o freio automático de aportes.
+# Se True, impede aportes consecutivos no mesmo ativo.
+FREIO_ATIVO = True
+
+# Período (em meses) para verificar aportes repetidos no mesmo ativo.
+# Ex: 2 significa que se houver mais de 1 aporte no mesmo ativo em 2 meses, o freio é ativado.
+FREIO_PERIODO_APORTES = 3
+
+# Duração inicial da quarentena (em meses) para um ativo que ativou o freio.
+FREIO_QUARENTENA_INICIAL = 6
+
+# Duração adicional da quarentena (em meses) se o ativo ativar o freio novamente.
+FREIO_QUARENTENA_ADICIONAL = 12
