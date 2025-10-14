@@ -1,0 +1,6 @@
+yfinance
+pandas
+matplotlib
+python-bcb
+numpy
+openpyxl
