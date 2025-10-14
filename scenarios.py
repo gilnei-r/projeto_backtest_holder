@@ -1,30 +1,7 @@
 # -*- coding: utf-8 -*-
 
-"""
-BACKTEST DE ESTRATÉGIAS DE INVESTIMENTO
-
-Este script realiza o backtest de duas estratégias de investimento em ações brasileiras:
-1. Aporte Único (Lump-Sum): Investe um valor fixo no início e o mantém (buy and hold).
-2. Aportes Mensais: Realiza aportes mensais corrigidos pela inflação, investindo no
-   ativo com menor valorização na carteira.
-
-O desempenho é comparado com o benchmark Selic.
-
-Para configurar os parâmetros do backtest, modifique o arquivo `config.py`.
-"""
-
-import time
-import warnings
-from datetime import datetime
-
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
-import numpy as np
 import pandas as pd
-import yfinance as yf
-from bcb import sgs
-
-# Importa as configurações do arquivo config.py
+import numpy as np
 import config
 
 # --- Funções Auxiliares ---
@@ -34,48 +11,6 @@ def calculate_cagr(start_value, end_value, years):
     if start_value == 0 or years <= 0:
         return 0
     return (end_value / start_value) ** (1 / years) - 1
-
-def download_bcb_series(series_code, series_name, start_date, end_date, chunk_years=3):
-    """Baixa séries temporais do BCB com lógica de retentativa e chunking."""
-    print(f"Baixando dados para {series_name}...")
-    chunks = []
-    temp_start = pd.to_datetime(start_date)
-    end_date_dt = pd.to_datetime(end_date)
-
-    chunk_count = 0
-    while temp_start < end_date_dt:
-        temp_end = temp_start + pd.DateOffset(years=chunk_years)
-        if temp_end > end_date_dt:
-            temp_end = end_date_dt
-
-        chunk_count += 1
-        print(f"  Chunk {chunk_count}: {temp_start.strftime('%Y-%m-%d')} a {temp_end.strftime('%Y-%m-%d')}")
-
-        for attempt in range(3):
-            try:
-                chunk = sgs.get({series_name: series_code}, start=temp_start.strftime('%Y-%m-%d'), end=temp_end.strftime('%Y-%m-%d'))
-                if not chunk.empty:
-                    chunks.append(chunk)
-                    print(f"  OK: {len(chunk)} registros baixados")
-                break
-            except Exception as e:
-                print(f"  Tentativa {attempt + 1} falhou: {str(e)[:80]}")
-                if attempt < 2:
-                    time.sleep(2)
-                else:
-                    print(f"  ERRO: Falha apos 3 tentativas")
-                    break
-
-        temp_start = temp_end + pd.DateOffset(days=1)
-
-    if not chunks:
-        print(f"ERRO: Nenhum dado foi baixado para {series_name}")
-        return None
-
-    full_df = pd.concat(chunks)
-    full_df = full_df[~full_df.index.duplicated(keep='first')]
-    print(f"Total: {len(full_df)} registros para {series_name}")
-    return full_df
 
 def run_lump_sum_backtest(data_historica, selic_diaria, tickers_sa, data_inicio, data_fim):
     """Executa o backtest para o cenário de Aporte Único."""
@@ -257,103 +192,3 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
         print("AVISO: Nenhum aporte foi processado.")
 
     return portfolio_mensal
-
-def save_results_to_excel(lump_sum_results, monthly_results):
-    """Salva os resultados dos backtests em arquivos Excel separados."""
-    print("\nSalvando resultados em Excel...")
-    try:
-        with pd.ExcelWriter(config.ARQUIVO_RESULTADOS_APORTE_UNICO) as writer:
-            lump_sum_results.resample('M').last().to_excel(writer, sheet_name='Aporte Unico (Mensal)')
-        print(f"Resultados do Aporte Único salvos em '{config.ARQUIVO_RESULTADOS_APORTE_UNICO}'")
-
-        with pd.ExcelWriter(config.ARQUIVO_RESULTADOS_APORTES_MENSAIS) as writer:
-            monthly_results.resample('M').last().to_excel(writer, sheet_name='Aportes Mensais (Mensal)')
-        print(f"Resultados dos Aportes Mensais salvos em '{config.ARQUIVO_RESULTADOS_APORTES_MENSAIS}'")
-    except Exception as e:
-        print(f"ERRO ao salvar resultados em Excel: {e}")
-
-def plot_results(lump_sum_results, monthly_results):
-    """Gera e exibe os gráficos dos resultados."""
-    print("Gerando gráficos...")
-    
-    # Gráfico 1: Cenário de Aporte Único
-    fig1, ax1 = plt.subplots(figsize=(14, 8))
-    ax1.plot(lump_sum_results.index, lump_sum_results['Total'], label='Carteira', color='blue', linewidth=2)
-    if 'Selic' in lump_sum_results and not lump_sum_results['Selic'].isna().all():
-        ax1.plot(lump_sum_results.index, lump_sum_results['Selic'], label='Selic', color='green', linestyle='--')
-    ax1.set_title('Cenário 1: Curva de Capital com Aporte Único', fontsize=18)
-    ax1.set_xlabel('Data'); ax1.set_ylabel('Valor da Carteira (R$)'); ax1.legend(loc='upper left')
-    ax1.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))
-
-    # Gráfico 2: Cenário de Aportes Mensais
-    fig2, ax2 = plt.subplots(figsize=(14, 8))
-    ax2.plot(monthly_results.index, monthly_results['Total'], label='Carteira', color='blue', linewidth=2)
-    if 'Selic' in monthly_results and not monthly_results['Selic'].isna().all():
-        ax2.plot(monthly_results.index, monthly_results['Selic'], label='Selic', color='green', linestyle='--')
-    ax2.plot(monthly_results.index, monthly_results['Total Investido'], label='Total Investido', color='red', linestyle=':')
-    ax2.set_title('Cenário 2: Curva de Capital com Aportes Mensais', fontsize=18)
-    ax2.set_xlabel('Data'); ax2.set_ylabel('Valor da Carteira (R$)'); ax2.legend(loc='upper left')
-    ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))
-
-    # Gráfico 3: Distribuição de Aportes Mensais
-    fig3, ax3 = plt.subplots(figsize=(14, 8))
-    monthly_contributions = monthly_results['Ativo Aportado'].replace("", np.nan).resample('M').first()
-    contribution_counts = monthly_contributions.dropna().value_counts()
-    if not contribution_counts.empty:
-        contribution_counts.plot(kind='bar', ax=ax3, color='coral')
-        ax3.set_title('Quantidade de Aportes Mensais por Ativo', fontsize=18)
-        ax3.set_xlabel('Ativo'); ax3.set_ylabel('Número de Aportes')
-        ax3.tick_params(axis='x', rotation=90)
-    else:
-        ax3.text(0.5, 0.5, 'Sem dados de aporte para exibir.', horizontalalignment='center', verticalalignment='center')
-        ax3.set_title('Quantidade de Aportes Mensais por Ativo', fontsize=18)
-
-    plt.tight_layout()
-    plt.show()
-
-def main():
-    """Função principal que orquestra o processo de backtest."""
-    warnings.simplefilter(action='ignore', category=FutureWarning)
-
-    # Carrega configuração
-    tickers_brutos = config.EMPRESAS_INPUT.split()
-    tickers_sa = [config.TICKERS_MAP.get(t.upper()) for t in tickers_brutos]
-    data_inicio = config.DATA_INICIO
-    data_fim = config.DATA_FIM
-
-    # --- Download de Todos os Dados ---
-    print("--- INICIANDO DOWNLOAD DE DADOS ---")
-    try:
-        data_historica = yf.download(tickers_sa, start=data_inicio, end=data_fim, progress=True)
-        if data_historica.empty:
-            print("ERRO: Nenhum dado histórico de ações foi baixado. Verifique os tickers e o período.")
-            return
-
-        # Correção: Preenche dados de preço ausentes para garantir a continuidade da simulação
-        data_historica.ffill(inplace=True)
-
-    except Exception as e:
-        print(f"ERRO CRÍTICO ao baixar dados do yfinance: {e}")
-        return
-
-    selic_df = download_bcb_series(432, 'selic', data_inicio, data_fim)
-    ipca_df = download_bcb_series(433, 'ipca', data_inicio, data_fim)
-
-    # --- Preparação dos Dados de Benchmark ---
-    selic_diaria = (1 + selic_df['selic'] / 100) ** (1/252) if selic_df is not None else None
-    ipca_mensal = ipca_df['ipca'] / 100 if ipca_df is not None else None
-
-    # --- Execução dos Cenários de Backtest ---
-    lump_sum_results = run_lump_sum_backtest(data_historica, selic_diaria, tickers_sa, data_inicio, data_fim)
-    monthly_results = run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
-
-    # --- Salvamento e Visualização ---
-    if lump_sum_results is not None and monthly_results is not None:
-        save_results_to_excel(lump_sum_results, monthly_results)
-        plot_results(lump_sum_results, monthly_results)
-    else:
-        print("\nAVISO: Nenhum resultado foi gerado. Gráficos e salvamento em Excel foram ignorados.")
-
-if __name__ == "__main__":
-    main()
-
