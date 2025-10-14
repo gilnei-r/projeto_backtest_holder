@@ -8,7 +8,7 @@ Este script realiza o backtest de duas estratégias de investimento em ações b
 2. Aportes Mensais: Realiza aportes mensais corrigidos pela inflação, investindo no
    ativo com menor valorização na carteira.
 
-O desempenho é comparado com os benchmarks Selic e IMA-B 5+.
+O desempenho é comparado com o benchmark Selic.
 
 Para configurar os parâmetros do backtest, modifique o arquivo `config.py`.
 """
@@ -77,7 +77,7 @@ def download_bcb_series(series_code, series_name, start_date, end_date, chunk_ye
     print(f"Total: {len(full_df)} registros para {series_name}")
     return full_df
 
-def run_lump_sum_backtest(data_historica, selic_diaria, imab_diario_ret, tickers_sa, data_inicio, data_fim):
+def run_lump_sum_backtest(data_historica, selic_diaria, tickers_sa, data_inicio, data_fim):
     """Executa o backtest para o cenário de Aporte Único."""
     print("\n--- CENÁRIO 1: APORTE ÚNICO INICIAL ---")
     all_dates = pd.date_range(start=data_inicio, end=data_fim, freq='D')
@@ -108,9 +108,6 @@ def run_lump_sum_backtest(data_historica, selic_diaria, imab_diario_ret, tickers
     if selic_diaria is not None:
         selic_acumulada = selic_diaria.cumprod()
         curva_de_capital['Selic'] = investimento_total_inicial * selic_acumulada.reindex(all_dates, method='ffill')
-    if imab_diario_ret is not None:
-        imab_norm = (1 + imab_diario_ret).cumprod()
-        curva_de_capital['IMA-B'] = investimento_total_inicial * imab_norm.reindex(all_dates, method='ffill')
 
     anos = (pd.to_datetime(data_fim) - pd.to_datetime(data_inicio)).days / 365.25
     valor_final_carteira = curva_de_capital['Total'].iloc[-1]
@@ -121,25 +118,21 @@ def run_lump_sum_backtest(data_historica, selic_diaria, imab_diario_ret, tickers
     if 'Selic' in curva_de_capital and not curva_de_capital['Selic'].isna().all():
         valor_final_selic = curva_de_capital['Selic'].iloc[-1]
         print(f"Selic:    R$ {valor_final_selic:,.2f} | CAGR: {calculate_cagr(investimento_total_inicial, valor_final_selic, anos):.2%}")
-    if 'IMA-B' in curva_de_capital and not curva_de_capital['IMA-B'].isna().all():
-        valor_final_imab = curva_de_capital['IMA-B'].iloc[-1]
-        print(f"IMA-B 5+: R$ {valor_final_imab:,.2f} | CAGR: {calculate_cagr(investimento_total_inicial, valor_final_imab, anos):.2%}")
 
     return curva_de_capital
 
-def run_monthly_contributions_backtest(data_historica, selic_diaria, imab_diario_ret, ipca_mensal, tickers_sa, data_inicio, data_fim):
+def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim):
     """Executa o backtest para o cenário de Aportes Mensais."""
     print("\n\n--- CENÁRIO 2: APORTES MENSAIS CORRIGIDOS PELO IPCA ---")
     all_dates = pd.date_range(start=data_inicio, end=data_fim, freq='D')
     valid_tickers = [col for col in tickers_sa if col in data_historica['Close'].columns and not data_historica['Close'][col].dropna().empty]
-    columns_mensal = valid_tickers + ['Total', 'Selic', 'IMA-B', 'Total Investido', 'Aporte', 'Ativo Aportado']
+    columns_mensal = valid_tickers + ['Total', 'Selic', 'Total Investido', 'Aporte', 'Ativo Aportado']
     portfolio_mensal = pd.DataFrame(0.0, index=all_dates, columns=columns_mensal)
     portfolio_mensal['Ativo Aportado'] = ""
     num_shares = {ticker: 0.0 for ticker in valid_tickers}
     ipca_acumulado = (1 + ipca_mensal).cumprod().reindex(all_dates, method='ffill').fillna(1) if ipca_mensal is not None else pd.Series(1, index=all_dates)
 
     valor_selic = 0.0
-    valor_imab = 0.0
     total_investido = 0.0
     last_month_processed = None
 
@@ -149,7 +142,6 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, imab_diario
             if dia > all_dates[0]:
                 portfolio_mensal.loc[dia, 'Total'] = portfolio_mensal.loc[:dia, 'Total'].iloc[-2] if len(portfolio_mensal.loc[:dia, 'Total']) > 1 else 0
                 portfolio_mensal.loc[dia, 'Selic'] = valor_selic
-                portfolio_mensal.loc[dia, 'IMA-B'] = valor_imab
                 portfolio_mensal.loc[dia, 'Total Investido'] = total_investido
             continue
 
@@ -159,8 +151,6 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, imab_diario
             aporte_corrigido = config.APORTE_MENSAL_BASE * ipca_acumulado.loc[dia]
             total_investido += aporte_corrigido
             valor_selic += aporte_corrigido
-            if imab_diario_ret is not None:
-                valor_imab += aporte_corrigido
 
             portfolio_mensal.loc[dia, 'Aporte'] = aporte_corrigido
 
@@ -174,8 +164,6 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, imab_diario
 
         if selic_diaria is not None and dia in selic_diaria.index:
             valor_selic *= selic_diaria.loc[dia]
-        if imab_diario_ret is not None and dia in imab_diario_ret.index:
-            valor_imab *= (1 + imab_diario_ret.loc[dia])
 
         valor_total_dia = 0
         for ticker in valid_tickers:
@@ -189,7 +177,6 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, imab_diario
 
         portfolio_mensal.loc[dia, 'Total'] = valor_total_dia
         portfolio_mensal.loc[dia, 'Selic'] = valor_selic
-        portfolio_mensal.loc[dia, 'IMA-B'] = valor_imab
         portfolio_mensal.loc[dia, 'Total Investido'] = total_investido
 
     portfolio_mensal.ffill(inplace=True)
@@ -205,9 +192,6 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, imab_diario
         if 'Selic' in portfolio_mensal and not portfolio_mensal['Selic'].isna().all():
             valor_final_selic_m = portfolio_mensal['Selic'].iloc[-1]
             print(f"Selic:    R$ {valor_final_selic_m:,.2f} | Retorno sobre Investimento: {valor_final_selic_m / total_investido_final - 1:.2%}")
-        if 'IMA-B' in portfolio_mensal and not portfolio_mensal['IMA-B'].isna().all():
-            valor_final_imab_m = portfolio_mensal['IMA-B'].iloc[-1]
-            print(f"IMA-B 5+: R$ {valor_final_imab_m:,.2f} | Retorno sobre Investimento: {valor_final_imab_m / total_investido_final - 1:.2%}")
     else:
         print(f"Carteira: R$ {valor_final_carteira_m:,.2f}")
         print("AVISO: Nenhum aporte foi processado.")
@@ -237,8 +221,6 @@ def plot_results(lump_sum_results, monthly_results):
     ax1.plot(lump_sum_results.index, lump_sum_results['Total'], label='Carteira', color='blue', linewidth=2)
     if 'Selic' in lump_sum_results and not lump_sum_results['Selic'].isna().all():
         ax1.plot(lump_sum_results.index, lump_sum_results['Selic'], label='Selic', color='green', linestyle='--')
-    if 'IMA-B' in lump_sum_results and not lump_sum_results['IMA-B'].isna().all():
-        ax1.plot(lump_sum_results.index, lump_sum_results['IMA-B'], label='IMA-B 5+', color='purple', linestyle='--')
     ax1.set_title('Cenário 1: Curva de Capital com Aporte Único', fontsize=18)
     ax1.set_xlabel('Data'); ax1.set_ylabel('Valor da Carteira (R$)'); ax1.legend(loc='upper left')
     ax1.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))
@@ -248,8 +230,6 @@ def plot_results(lump_sum_results, monthly_results):
     ax2.plot(monthly_results.index, monthly_results['Total'], label='Carteira', color='blue', linewidth=2)
     if 'Selic' in monthly_results and not monthly_results['Selic'].isna().all():
         ax2.plot(monthly_results.index, monthly_results['Selic'], label='Selic', color='green', linestyle='--')
-    if 'IMA-B' in monthly_results and not monthly_results['IMA-B'].isna().all():
-        ax2.plot(monthly_results.index, monthly_results['IMA-B'], label='IMA-B 5+', color='purple', linestyle='--')
     ax2.plot(monthly_results.index, monthly_results['Total Investido'], label='Total Investido', color='red', linestyle=':')
     ax2.set_title('Cenário 2: Curva de Capital com Aportes Mensais', fontsize=18)
     ax2.set_xlabel('Data'); ax2.set_ylabel('Valor da Carteira (R$)'); ax2.legend(loc='upper left')
@@ -294,23 +274,14 @@ def main():
 
     selic_df = download_bcb_series(432, 'selic', data_inicio, data_fim)
     ipca_df = download_bcb_series(433, 'ipca', data_inicio, data_fim)
-    imab5_df = download_bcb_series(12467, 'imab5', data_inicio, data_fim)
 
     # --- Preparação dos Dados de Benchmark ---
     selic_diaria = (1 + selic_df['selic'] / 100) ** (1/252) if selic_df is not None else None
     ipca_mensal = ipca_df['ipca'] / 100 if ipca_df is not None else None
 
-    if imab5_df is not None and not imab5_df.empty:
-        imab_normalizado = imab5_df['imab5'] / imab5_df['imab5'].iloc[0]
-        imab_diario_ret = imab_normalizado.pct_change().fillna(0)
-        print("IMA-B 5+ carregado com sucesso.")
-    else:
-        print("AVISO: IMA-B 5+ não disponível. Benchmarks de renda fixa serão limitados à Selic.")
-        imab_diario_ret = None
-
     # --- Execução dos Cenários de Backtest ---
-    lump_sum_results = run_lump_sum_backtest(data_historica, selic_diaria, imab_diario_ret, tickers_sa, data_inicio, data_fim)
-    monthly_results = run_monthly_contributions_backtest(data_historica, selic_diaria, imab_diario_ret, ipca_mensal, tickers_sa, data_inicio, data_fim)
+    lump_sum_results = run_lump_sum_backtest(data_historica, selic_diaria, tickers_sa, data_inicio, data_fim)
+    monthly_results = run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
 
     # --- Salvamento e Visualização ---
     if lump_sum_results is not None and monthly_results is not None:
