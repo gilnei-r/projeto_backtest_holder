@@ -44,8 +44,7 @@ def main():
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
     # Carrega configuração
-    tickers_brutos = config.EMPRESAS_INPUT.split()
-    tickers_sa = [config.TICKERS_MAP.get(t.upper()) for t in tickers_brutos]
+    tickers_sa = config.TICKERS_EMPRESAS
     data_inicio = config.DATA_INICIO
     data_fim = config.DATA_FIM
 

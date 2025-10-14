@@ -12,23 +12,15 @@ from datetime import datetime
 
 # --- Configuração Geral ---
 
-# Lista de tickers de ações a serem analisadas.
-# Os tickers devem ser separados por espaços. Ex: "ITUB4 BBDC4 BBAS3"
-EMPRESAS_INPUT = "ITUB BBDC BBAS ABEV ITSA VIVT BRFS CRUZ UGPA PCAR GGBR WEGE PSSA BRSR CYRE GOAU WHRL NATU GRND EMBR GUAR COCE TRPL AMER RADL ALPA BAZA LEVE POMO RAPT ETER FRAS CGRA"
-
-# Mapeamento de tickers curtos para os tickers completos com sufixo ".SA"
-# usado pelo yfinance.
-TICKERS_MAP = {
-    'ITUB': 'ITUB4.SA', 'BBDC': 'BBDC4.SA', 'BBAS': 'BBAS3.SA', 'ABEV': 'ABEV3.SA',
-    'ITSA': 'ITSA4.SA', 'VIVT': 'VIVT3.SA', 'BRFS': 'BRFS3.SA', 'CRUZ': 'CRUZ3.SA',
-    'UGPA': 'UGPA3.SA', 'PCAR': 'PCAR3.SA', 'GGBR': 'GGBR4.SA', 'WEGE': 'WEGE3.SA',
-    'PSSA': 'PSSA3.SA', 'BRSR': 'BRSR6.SA', 'CYRE': 'CYRE3.SA', 'GOAU': 'GOAU4.SA',
-    'WHRL': 'WHRL4.SA', 'NATU': 'NATU3.SA', 'GRND': 'GRND3.SA', 'EMBR': 'EMBR3.SA',
-    'GUAR': 'GUAR3.SA', 'COCE': 'COCE5.SA', 'TRPL': 'TRPL4.SA', 'AMER': 'AMER3.SA',
-    'RADL': 'RADL3.SA', 'ALPA': 'ALPA4.SA', 'BAZA': 'BAZA3.SA', 'LEVE': 'LEVE3.SA',
-    'POMO': 'POMO4.SA', 'RAPT': 'RAPT4.SA', 'ETER': 'ETER3.SA', 'FRAS': 'FRAS3.SA',
-    'CGRA': 'CGRA4.SA'
-}
+# Lista de tickers de ações a serem analisadas, no formato requerido pelo yfinance (com sufixo .SA).
+TICKERS_EMPRESAS = [
+    'ITUB4.SA', 'BBDC4.SA', 'BBAS3.SA', 'ABEV3.SA', 'ITSA4.SA', 'VIVT3.SA', 
+    'BRFS3.SA', 'CRUZ3.SA', 'UGPA3.SA', 'PCAR3.SA', 'GGBR4.SA', 'WEGE3.SA', 
+    'PSSA3.SA', 'BRSR6.SA', 'CYRE3.SA', 'GOAU4.SA', 'WHRL4.SA', 'NATU3.SA', 
+    'GRND3.SA', 'EMBR3.SA', 'GUAR3.SA', 'COCE5.SA', 'TRPL4.SA', 'AMER3.SA', 
+    'RADL3.SA', 'ALPA4.SA', 'BAZA3.SA', 'LEVE3.SA', 'POMO4.SA', 'RAPT4.SA', 
+    'ETER3.SA', 'FRAS3.SA', 'CGRA4.SA'
+]
 
 # Data de início do backtest no formato "AAAA-MM-DD".
 DATA_INICIO = "2015-01-01"
