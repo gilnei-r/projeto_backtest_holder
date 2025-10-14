@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nSubstituir IMAB11.SA por IMA-B 5+ do BCB e corrigir bugs críticos\n\n## Mudanças Principais\n\n### 1. Substituição do Benchmark de Renda Fixa\n- Removido download do ETF IMAB11.SA via yfinance\n- Implementado download direto do índice IMA-B 5+ (série 12467) do BCB\n- Índice normalizado para base 100 no primeiro dia do backtest\n- Atualizada nomenclatura para \"IMA-B 5+\" em todos os outputs e gráficos\n\n### 2. Correção Crítica: Aportes Mensais não Processados\n**Bug**: Cenário 2 retornava R$ 0,00 devido a falha na detecção de novos meses\n**Causa**: Variável `last_month_processed` usava apenas o mês (1-12), falhando quando o ano mudava\n**Solução**: Implementado rastreamento com tupla (ano, mês): `current_month = (dia.year, dia.month)`\n\n### 3. Correção: Loop de Iteração Incompleto\n**Bug**: Loop iterava apenas sobre `data_historica.index` (dias de negociação)\n**Solução**: Alterado para iterar sobre `all_dates` (todos os dias), com forward-fill para não-negociação\n\n### 4. Melhorias no Download BCB\n- Reduzido tamanho dos chunks de 9 para 3 anos (evita timeouts)\n- Implementado logging detalhado com progresso por chunk\n- Corrigido encoding para Windows (removidos caracteres Unicode ✓/✗)\n- Tratamento robusto: continua processamento mesmo se chunks falharem\n- Adicionada proteção contra divisão por zero nos cálculos de retorno\n\n### 5. Atualização da Documentação\n- CLAUDE.md: Atualizado com nova fonte de dados, line numbers corretos, e detalhes da correção de bugs\n- GEMINI.md: Atualizado para refletir IMA-B 5+ e três gráficos de saída\n\n## Resultados Validados\n- Cenário 1: Carteira R$ 92.198 (CAGR 10,01%), IMA-B 5+ R$ 80.569 (CAGR 8,64%)\n- Cenário 2: Carteira R$ 335.337 (84,96%), IMA-B 5+ R$ 245.234 (35,26%)\n- 2.100 registros de IMA-B 5+ baixados com sucesso (2015-2023)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
