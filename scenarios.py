@@ -3,6 +3,7 @@
 import pandas as pd
 import numpy as np
 import config
+from config import IPCA_BENCHMARK_X
 
 # --- Funções Auxiliares ---
 
@@ -12,7 +13,7 @@ def calculate_cagr(start_value, end_value, years):
         return 0
     return (end_value / start_value) ** (1 / years) - 1
 
-def run_lump_sum_backtest(data_historica, selic_diaria, tickers_sa, data_inicio, data_fim):
+def run_lump_sum_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim):
     """Executa o backtest para o cenário de Aporte Único."""
     print("\n--- CENÁRIO 1: APORTE ÚNICO INICIAL ---")
     all_dates = pd.date_range(start=data_inicio, end=data_fim, freq='D')
@@ -43,6 +44,8 @@ def run_lump_sum_backtest(data_historica, selic_diaria, tickers_sa, data_inicio,
     if selic_diaria is not None:
         selic_acumulada = selic_diaria.cumprod()
         curva_de_capital['Selic'] = investimento_total_inicial * selic_acumulada.reindex(all_dates, method='ffill')
+
+    curva_de_capital = calculate_ipca_benchmark(curva_de_capital, ipca_mensal, investimento_total_inicial)
 
     anos = (pd.to_datetime(data_fim) - pd.to_datetime(data_inicio)).days / 365.25
     valor_final_carteira = curva_de_capital['Total'].iloc[-1]
@@ -191,6 +194,7 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
         portfolio_mensal.loc[dia, 'Total Investido'] = total_investido
 
     portfolio_mensal.ffill(inplace=True)
+    portfolio_mensal = calculate_ipca_benchmark(portfolio_mensal, ipca_mensal, portfolio_mensal['Total Investido'])
 
     valor_final_carteira_m = portfolio_mensal['Total'].iloc[-1]
     total_investido_final = portfolio_mensal['Total Investido'].iloc[-1]
@@ -208,3 +212,28 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
         print("AVISO: Nenhum aporte foi processado.")
 
     return portfolio_mensal
+
+def calculate_ipca_benchmark(portfolio_df, ipca_mensal, initial_investment):
+    """Calcula o benchmark IPCA + X% e o adiciona ao dataframe do portfólio."""
+    if ipca_mensal is None:
+        return portfolio_df
+
+    # Converte a taxa de juros real anual para uma taxa diária
+    taxa_juros_real_anual = IPCA_BENCHMARK_X / 100.0
+    taxa_juros_real_diaria = (1 + taxa_juros_real_anual) ** (1 / 252) - 1
+
+    # Prepara o dataframe do benchmark
+    benchmark_df = pd.DataFrame(index=portfolio_df.index)
+    benchmark_df['ipca'] = ipca_mensal.reindex(benchmark_df.index, method='ffill')
+    benchmark_df.fillna(0, inplace=True)
+
+    # Calcula o fator de correção diário (IPCA + juros real)
+    fator_diario = (1 + benchmark_df['ipca'] / 100) ** (1 / 21) * (1 + taxa_juros_real_diaria)
+    
+    # Calcula o benchmark acumulado
+    benchmark_acumulado = fator_diario.cumprod()
+    
+    # Adiciona a coluna do benchmark ao dataframe do portfólio
+    portfolio_df['IPCA_Benchmark'] = initial_investment * benchmark_acumulado
+    
+    return portfolio_df

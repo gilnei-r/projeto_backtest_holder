@@ -5,6 +5,31 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
+def plot_ticker_distribution(monthly_results):
+    """Gera um gráfico de barras com a distribuição de valor por ativo."""
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    # Pega a última linha de dados para os valores finais
+    final_values = monthly_results.iloc[-1]
+    
+    # Filtra para manter apenas os tickers, excluindo colunas de resumo
+    tickers = [col for col in monthly_results.columns if '.SA' in col]
+    ticker_values = final_values[tickers]
+    
+    # Ordena os valores em ordem decrescente
+    sorted_ticker_values = ticker_values.sort_values(ascending=False)
+    
+    if not sorted_ticker_values.empty:
+        sorted_ticker_values.plot(kind='bar', ax=ax, color='skyblue')
+        ax.set_title('Distribuição de Valor por Ativo no Final do Período', fontsize=18)
+        ax.set_xlabel('Ativo')
+        ax.set_ylabel('Valor Total (R$)')
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))
+        ax.tick_params(axis='x', rotation=45)
+    else:
+        ax.text(0.5, 0.5, 'Sem dados de valor de ticker para exibir.', horizontalalignment='center', verticalalignment='center')
+        ax.set_title('Distribuição de Valor por Ativo', fontsize=18)
+
 def plot_results(lump_sum_results, monthly_results):
     """Gera e exibe os gráficos dos resultados."""
     print("Gerando gráficos...")
@@ -14,6 +39,8 @@ def plot_results(lump_sum_results, monthly_results):
     ax1.plot(lump_sum_results.index, lump_sum_results['Total'], label='Carteira', color='blue', linewidth=2)
     if 'Selic' in lump_sum_results and not lump_sum_results['Selic'].isna().all():
         ax1.plot(lump_sum_results.index, lump_sum_results['Selic'], label='Selic', color='green', linestyle='--')
+    if 'IPCA_Benchmark' in lump_sum_results and not lump_sum_results['IPCA_Benchmark'].isna().all():
+        ax1.plot(lump_sum_results.index, lump_sum_results['IPCA_Benchmark'], label='IPCA + 6%', color='purple', linestyle='-.')
     ax1.set_title('Cenário 1: Curva de Capital com Aporte Único', fontsize=18)
     ax1.set_xlabel('Data'); ax1.set_ylabel('Valor da Carteira (R$)'); ax1.legend(loc='upper left')
     ax1.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))
@@ -23,6 +50,8 @@ def plot_results(lump_sum_results, monthly_results):
     ax2.plot(monthly_results.index, monthly_results['Total'], label='Carteira', color='blue', linewidth=2)
     if 'Selic' in monthly_results and not monthly_results['Selic'].isna().all():
         ax2.plot(monthly_results.index, monthly_results['Selic'], label='Selic', color='green', linestyle='--')
+    if 'IPCA_Benchmark' in monthly_results and not monthly_results['IPCA_Benchmark'].isna().all():
+        ax2.plot(monthly_results.index, monthly_results['IPCA_Benchmark'], label='IPCA + 6%', color='purple', linestyle='-.')
     ax2.plot(monthly_results.index, monthly_results['Total Investido'], label='Total Investido', color='red', linestyle=':')
     ax2.set_title('Cenário 2: Curva de Capital com Aportes Mensais', fontsize=18)
     ax2.set_xlabel('Data'); ax2.set_ylabel('Valor da Carteira (R$)'); ax2.legend(loc='upper left')
@@ -46,6 +75,9 @@ def plot_results(lump_sum_results, monthly_results):
     else:
         ax3.text(0.5, 0.5, 'Sem dados de aporte para exibir.', horizontalalignment='center', verticalalignment='center')
         ax3.set_title('Quantidade de Aportes Mensais por Ativo', fontsize=18)
+
+    # Gráfico 4: Distribuição de Valor por Ativo
+    plot_ticker_distribution(monthly_results)
 
     plt.tight_layout()
     plt.show()

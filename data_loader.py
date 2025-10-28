@@ -1,9 +1,17 @@
 # -*- coding: utf-8 -*-
 
+import os
 import time
 import pandas as pd
 import yfinance as yf
 from bcb import sgs
+from datetime import datetime, timedelta
+from config import DATA_UPDATE_DAYS
+
+# --- Constantes de Arquivos e Séries ---
+STOCK_DATA_FILE = "stock_data.csv"
+IPCA_SERIES_CODE = 433
+SELIC_SERIES_CODE = 432
 
 def download_bcb_series(series_code, series_name, start_date, end_date, chunk_years=3):
     """Baixa séries temporais do BCB com lógica de retentativa e chunking."""
@@ -47,21 +55,45 @@ def download_bcb_series(series_code, series_name, start_date, end_date, chunk_ye
     print(f"Total: {len(full_df)} registros para {series_name}")
     return full_df
 
+def get_ipca_data(start_date, end_date):
+    """Busca os dados do IPCA usando o código da série do BCB."""
+    return download_bcb_series(IPCA_SERIES_CODE, 'ipca', start_date, end_date)
+
+def get_selic_data(start_date, end_date):
+    """Busca os dados da SELIC usando o código da série do BCB."""
+    return download_bcb_series(SELIC_SERIES_CODE, 'selic', start_date, end_date)
+
 def download_stock_data(tickers, start_date, end_date):
-    """Baixa dados históricos de ações e preenche valores ausentes."""
-    print("--- INICIANDO DOWNLOAD DE DADOS DE AÇÕES ---")
-    try:
-        data_historica = yf.download(tickers, start=start_date, end=end_date, progress=True)
-        if data_historica.empty:
-            print("ERRO: Nenhum dado histórico de ações foi baixado. Verifique os tickers e o período.")
+    """Baixa dados históricos de ações, com cache para evitar downloads desnecessários."""
+    print("--- VERIFICANDO DADOS DE AÇÕES ---")
+    
+    use_cache = False
+    if os.path.exists(STOCK_DATA_FILE):
+        last_modified_time = os.path.getmtime(STOCK_DATA_FILE)
+        if (datetime.now() - datetime.fromtimestamp(last_modified_time)).days < DATA_UPDATE_DAYS:
+            print(f"Usando dados de cache do arquivo '{STOCK_DATA_FILE}' (menos de {DATA_UPDATE_DAYS} dia(s) de idade).")
+            use_cache = True
+
+    if use_cache:
+        data_historica = pd.read_csv(STOCK_DATA_FILE, header=[0, 1], index_col=0, parse_dates=True)
+    else:
+        print("Baixando novos dados de ações...")
+        try:
+            data_historica = yf.download(tickers, start=start_date, end=end_date, progress=True)
+            if data_historica.empty:
+                print("ERRO: Nenhum dado histórico de ações foi baixado.")
+                return None
+            # Salva os dados baixados em cache
+            data_historica.to_csv(STOCK_DATA_FILE)
+            print(f"Novos dados salvos em '{STOCK_DATA_FILE}'.")
+        except Exception as e:
+            print(f"ERRO CRÍTICO ao baixar dados do yfinance: {e}")
             return None
 
-        # Correção: Preenche dados de preço ausentes para garantir a continuidade da simulação
-        data_historica.ffill(inplace=True)
-        return data_historica
-    except Exception as e:
-        print(f"ERRO CRÍTICO ao baixar dados do yfinance: {e}")
-        return None
+    # Garante que o preenchimento de dados ausentes seja sempre executado
+    data_historica.ffill(inplace=True)
+    print("Dados de ações carregados e processados.")
+    return data_historica
 
 def prepare_benchmark_data(selic_df, ipca_df):
     """Prepara os dados de benchmark (Selic e IPCA)."""

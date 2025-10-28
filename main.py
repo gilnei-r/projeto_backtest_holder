@@ -53,14 +53,14 @@ def main():
     if data_historica is None:
         return # Encerra se não houver dados de ações
 
-    selic_df = data_loader.download_bcb_series(432, 'selic', data_inicio, data_fim)
-    ipca_df = data_loader.download_bcb_series(433, 'ipca', data_inicio, data_fim)
+    selic_df = data_loader.get_selic_data(data_inicio, data_fim)
+    ipca_df = data_loader.get_ipca_data(data_inicio, data_fim)
 
     # --- Preparação dos Dados de Benchmark ---
     selic_diaria, ipca_mensal = data_loader.prepare_benchmark_data(selic_df, ipca_df)
 
     # --- Execução dos Cenários de Backtest ---
-    lump_sum_results = scenarios.run_lump_sum_backtest(data_historica, selic_diaria, tickers_sa, data_inicio, data_fim)
+    lump_sum_results = scenarios.run_lump_sum_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
     monthly_results = scenarios.run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
 
     # --- Salvamento e Visualização ---

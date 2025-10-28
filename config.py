@@ -49,6 +49,17 @@ DATA_INICIO = "2015-01-01"
 # Data de fim do backtest. Por padrão, usa a data de hoje.
 DATA_FIM = datetime.today().strftime('%Y-%m-%d')
 
+# Frequência (em dias) para verificar a necessidade de baixar novos dados.
+# Se o arquivo de dados for mais antigo que este número de dias, um novo download será feito.
+DATA_UPDATE_DAYS = 1
+
+
+# --- Configuração de Benchmarks ---
+
+# Taxa adicional (em %) a ser somada ao IPCA para o benchmark de inflação.
+# Ex: 6.0 para IPCA + 6%
+IPCA_BENCHMARK_X = 6.0
+
 
 # --- Configuração do Cenário 1: Aporte Único ---
 
@@ -84,7 +95,7 @@ FREIO_ATIVO = True
 
 # Período (em meses) para verificar aportes repetidos no mesmo ativo.
 # Ex: 2 significa que se houver mais de 1 aporte no mesmo ativo em 2 meses, o freio é ativado.
-FREIO_PERIODO_APORTES = 3
+FREIO_PERIODO_APORTES = 2
 
 # Duração inicial da quarentena (em meses) para um ativo que ativou o freio.
 FREIO_QUARENTENA_INICIAL = 6

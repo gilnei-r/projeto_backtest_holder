@@ -18,3 +18,18 @@ __pycache__/
 
 agent_prompts/
 tasks/
+
+# Virtual environment
+.venv/
+venv/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Log files
+*.log
+
+# Data files
+stock_data.csv
