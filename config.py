@@ -66,7 +66,7 @@ APORTE_MENSAL_BASE = 1000.0
 # Número de empresas em que o aporte mensal será dividido.
 # O valor será dividido igualmente entre as 'n' empresas de menor valor na carteira.
 # Se for 1, o comportamento é o original (aporta tudo na empresa de menor valor).
-NUMERO_EMPRESAS_POR_APORTE = 2/
+NUMERO_EMPRESAS_POR_APORTE = 2
 
 
 # --- Configuração de Saída ---
