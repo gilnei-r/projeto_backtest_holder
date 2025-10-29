@@ -44,7 +44,7 @@ TICKERS_EMPRESAS = [
 ]
 
 # Data de início do backtest no formato "AAAA-MM-DD".
-DATA_INICIO = "2015-01-01"
+DATA_INICIO = "2025-01-01"
 
 # Data de fim do backtest. Por padrão, usa a data de hoje.
 DATA_FIM = datetime.today().strftime('%Y-%m-%d')
@@ -74,6 +74,10 @@ VALOR_INVESTIDO_POR_EMPRESA = 1000.00
 # Este valor será corrigido mensalmente pela inflação (IPCA).
 APORTE_MENSAL_BASE = 1000.0
 
+# Percentual alvo para o ativo de renda fixa (CDB/SELIC) no cenário misto.
+# Exemplo: 0.25 significa que o objetivo é ter 25% do valor do portfólio em CDB.
+CDB_PERCENTAGE = 0.25
+
 # Número de empresas em que o aporte mensal será dividido.
 # O valor será dividido igualmente entre as 'n' empresas de menor valor na carteira.
 # Se for 1, o comportamento é o original (aporta tudo na empresa de menor valor).
@@ -85,6 +89,7 @@ NUMERO_EMPRESAS_POR_APORTE = 2
 # Nomes dos arquivos de saída para os resultados em Excel.
 ARQUIVO_RESULTADOS_APORTE_UNICO = "backtest_results_lump_sum.xlsx"
 ARQUIVO_RESULTADOS_APORTES_MENSAIS = "backtest_results_monthly.xlsx"
+ARQUIVO_RESULTADOS_APORTES_CDB = "backtest_results_cdb_mixed.xlsx"
 
 
 # --- Configuração do Freio Automático (Cenário 2) ---

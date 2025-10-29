@@ -237,3 +237,104 @@ def calculate_ipca_benchmark(portfolio_df, ipca_mensal, initial_investment):
     portfolio_df['IPCA_Benchmark'] = initial_investment * benchmark_acumulado
     
     return portfolio_df
+
+def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio_data, selic_data, ipca_data, cdb_percentage):
+    """Executa o backtest para o cenário com alocação em CDB."""
+    print("\n\n--- CENÁRIO 3: APORTES MENSAIS COM ALOCAÇÃO EM CDB ---")
+
+    all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
+    valid_tickers = [col for col in config.TICKERS_EMPRESAS if col in portfolio_data['Close'].columns and not portfolio_data['Close'][col].dropna().empty]
+    
+    columns = valid_tickers + ['CDB', 'Total', 'Selic', 'Total Investido', 'Aporte', 'Ativo Aportado']
+    results_df = pd.DataFrame(0.0, index=all_dates, columns=columns)
+    results_df['Aporte'] = np.nan
+    results_df['Ativo Aportado'] = np.nan
+
+    num_shares = {ticker: 0.0 for ticker in valid_tickers}
+    cdb_value = 0.0
+    total_investido = 0.0
+    valor_selic_benchmark = 0.0
+    last_month_processed = None
+
+    ipca_acumulado = (1 + ipca_data).cumprod().reindex(all_dates, method='ffill').fillna(1) if ipca_data is not None else pd.Series(1, index=all_dates)
+
+    print("Processando backtest com aportes mensais e alocação em CDB...")
+    for dia in all_dates:
+        if dia not in portfolio_data.index:
+            if dia > all_dates[0]:
+                for ticker in valid_tickers:
+                    results_df.loc[dia, ticker] = results_df.loc[dia - pd.Timedelta(days=1), ticker]
+                results_df.loc[dia, 'CDB'] = cdb_value
+                results_df.loc[dia, 'Total'] = results_df.loc[dia - pd.Timedelta(days=1), 'Total']
+                results_df.loc[dia, 'Selic'] = valor_selic_benchmark
+                results_df.loc[dia, 'Total Investido'] = total_investido
+            continue
+
+        current_month = (dia.year, dia.month)
+        if current_month != last_month_processed:
+            last_month_processed = current_month
+            aporte_corrigido = monthly_contribution * ipca_acumulado.loc[dia]
+            total_investido += aporte_corrigido
+            valor_selic_benchmark += aporte_corrigido
+            results_df.loc[dia, 'Aporte'] = aporte_corrigido
+
+            total_portfolio_value = sum(num_shares[ticker] * portfolio_data.loc[dia, ('Close', ticker)] for ticker in valid_tickers if pd.notna(portfolio_data.loc[dia, ('Close', ticker)])) + cdb_value
+            
+            # Lógica de alocação
+            if (total_portfolio_value > 0 and (cdb_value / total_portfolio_value) < cdb_percentage) or total_portfolio_value == 0:
+                cdb_value += aporte_corrigido
+                results_df.loc[dia, 'Ativo Aportado'] = 'CDB'
+            else:
+                valores_ativos = {
+                    ticker: num_shares[ticker] * portfolio_data.loc[dia, ('Close', ticker)]
+                    for ticker in valid_tickers
+                    if pd.notna(portfolio_data.loc[dia, ('Close', ticker)])
+                }
+                if valores_ativos:
+                    ativo_menor_valor = min(valores_ativos, key=valores_ativos.get)
+                    preco = portfolio_data.loc[dia, ('Close', ativo_menor_valor)]
+                    if pd.notna(preco) and preco > 0:
+                        num_shares[ativo_menor_valor] += aporte_corrigido / preco
+                        results_df.loc[dia, 'Ativo Aportado'] = ativo_menor_valor
+
+        # Atualiza valor do CDB com a Selic diária
+        if selic_data is not None and dia in selic_data.index:
+            cdb_value *= selic_data.loc[dia]
+            valor_selic_benchmark *= selic_data.loc[dia]
+
+        # Atualiza valores diários do portfólio
+        valor_total_dia = 0
+        for ticker in valid_tickers:
+            if pd.notna(portfolio_data.loc[dia, ('Close', ticker)]):
+                preco_dia = portfolio_data.loc[dia, ('Close', ticker)]
+                if ('Dividends', ticker) in portfolio_data.columns and pd.notna(portfolio_data.loc[dia, ('Dividends', ticker)]) and portfolio_data.loc[dia, ('Dividends', ticker)] > 0:
+                    num_shares[ticker] += (num_shares[ticker] * portfolio_data.loc[dia, ('Dividends', ticker)]) / preco_dia
+                valor_ativo = num_shares[ticker] * preco_dia
+                results_df.loc[dia, ticker] = valor_ativo
+                valor_total_dia += valor_ativo
+        
+        results_df.loc[dia, 'CDB'] = cdb_value
+        valor_total_dia += cdb_value
+        results_df.loc[dia, 'Total'] = valor_total_dia
+        results_df.loc[dia, 'Selic'] = valor_selic_benchmark
+        results_df.loc[dia, 'Total Investido'] = total_investido
+
+    results_df.ffill(inplace=True)
+    results_df = calculate_ipca_benchmark(results_df, ipca_data, results_df['Total Investido'])
+    
+    # Resultados finais
+    valor_final_carteira = results_df['Total'].iloc[-1]
+    total_investido_final = results_df['Total Investido'].iloc[-1]
+    anos = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days / 365.25
+    print("\n--- Resultados do Backtest (Aportes Mensais com CDB) ---")
+    print(f"Período: {start_date} a {end_date} ({anos:.1f} anos)")
+    print(f"Total Investido (corrigido): R$ {total_investido_final:,.2f}")
+    if total_investido_final > 0:
+        print(f"Carteira: R$ {valor_final_carteira:,.2f} | Retorno sobre Investimento: {valor_final_carteira / total_investido_final - 1:.2%}")
+        if 'Selic' in results_df and not results_df['Selic'].isna().all():
+            valor_final_selic_m = results_df['Selic'].iloc[-1]
+            print(f"Selic (Benchmark): R$ {valor_final_selic_m:,.2f} | Retorno sobre Investimento: {valor_final_selic_m / total_investido_final - 1:.2%}")
+    else:
+        print(f"Carteira: R$ {valor_final_carteira:,.2f}")
+
+    return results_df

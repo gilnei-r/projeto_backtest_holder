@@ -30,7 +30,7 @@ def plot_ticker_distribution(monthly_results):
         ax.text(0.5, 0.5, 'Sem dados de valor de ticker para exibir.', horizontalalignment='center', verticalalignment='center')
         ax.set_title('Distribuição de Valor por Ativo', fontsize=18)
 
-def plot_results(lump_sum_results, monthly_results):
+def plot_results(lump_sum_results, monthly_results, cdb_results):
     """Gera e exibe os gráficos dos resultados."""
     print("Gerando gráficos...")
     
@@ -57,7 +57,10 @@ def plot_results(lump_sum_results, monthly_results):
     ax2.set_xlabel('Data'); ax2.set_ylabel('Valor da Carteira (R$)'); ax2.legend(loc='upper left')
     ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))
 
-    # Gráfico 3: Distribuição de Aportes Mensais
+    # Gráfico 3: Cenário CDB Misto
+    plot_cdb_mixed_scenario(cdb_results)
+
+    # Gráfico 4: Distribuição de Aportes Mensais
     fig3, ax3 = plt.subplots(figsize=(14, 8))
     monthly_contributions = monthly_results['Ativo Aportado'].replace("", np.nan).resample('M').first().dropna()
     
@@ -76,8 +79,21 @@ def plot_results(lump_sum_results, monthly_results):
         ax3.text(0.5, 0.5, 'Sem dados de aporte para exibir.', horizontalalignment='center', verticalalignment='center')
         ax3.set_title('Quantidade de Aportes Mensais por Ativo', fontsize=18)
 
-    # Gráfico 4: Distribuição de Valor por Ativo
+    # Gráfico 5: Distribuição de Valor por Ativo
     plot_ticker_distribution(monthly_results)
 
     plt.tight_layout()
     plt.show()
+
+def plot_cdb_mixed_scenario(results_df):
+    """Gera o gráfico para o cenário de aportes com alocação em CDB."""
+    fig, ax = plt.subplots(figsize=(14, 8))
+    ax.plot(results_df.index, results_df['Total'], label='Carteira', color='blue', linewidth=2)
+    if 'Selic' in results_df and not results_df['Selic'].isna().all():
+        ax.plot(results_df.index, results_df['Selic'], label='Selic', color='green', linestyle='--')
+    if 'IPCA_Benchmark' in results_df and not results_df['IPCA_Benchmark'].isna().all():
+        ax.plot(results_df.index, results_df['IPCA_Benchmark'], label='IPCA + 6%', color='purple', linestyle='-.')
+    ax.plot(results_df.index, results_df['Total Investido'], label='Total Investido', color='red', linestyle=':')
+    ax.set_title('Cenário 3: Curva de Capital com Aportes Mensais e Alocação em CDB', fontsize=18)
+    ax.set_xlabel('Data'); ax.set_ylabel('Valor da Carteira (R$)'); ax.legend(loc='upper left')
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))

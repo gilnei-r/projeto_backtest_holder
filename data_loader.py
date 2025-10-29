@@ -13,6 +13,15 @@ STOCK_DATA_FILE = "stock_data.csv"
 IPCA_SERIES_CODE = 433
 SELIC_SERIES_CODE = 432
 
+def _is_cache_valid(file_path):
+    """Verifica se um arquivo de cache é válido com base na data de modificação."""
+    if not os.path.exists(file_path):
+        return False
+    last_modified_time = os.path.getmtime(file_path)
+    if (datetime.now() - datetime.fromtimestamp(last_modified_time)).days < DATA_UPDATE_DAYS:
+        return True
+    return False
+
 def download_bcb_series(series_code, series_name, start_date, end_date, chunk_years=3):
     """Baixa séries temporais do BCB com lógica de retentativa e chunking."""
     print(f"Baixando dados para {series_name}...")
@@ -56,39 +65,78 @@ def download_bcb_series(series_code, series_name, start_date, end_date, chunk_ye
     return full_df
 
 def get_ipca_data(start_date, end_date):
-    """Busca os dados do IPCA usando o código da série do BCB."""
-    return download_bcb_series(IPCA_SERIES_CODE, 'ipca', start_date, end_date)
+    """Busca os dados do IPCA, com cache em arquivo CSV."""
+    os.makedirs('data', exist_ok=True)
+    file_path = 'data/IPCA.csv'
+    
+    if _is_cache_valid(file_path):
+        print(f"Usando cache para IPCA de '{file_path}'.")
+        return pd.read_csv(file_path, index_col=0, parse_dates=True)
+    
+    print("Baixando novos dados para IPCA...")
+    ipca_df = download_bcb_series(IPCA_SERIES_CODE, 'ipca', start_date, end_date)
+    if ipca_df is not None and not ipca_df.empty:
+        ipca_df.to_csv(file_path)
+        print(f"Novos dados de IPCA salvos em '{file_path}'.")
+    return ipca_df
 
 def get_selic_data(start_date, end_date):
-    """Busca os dados da SELIC usando o código da série do BCB."""
-    return download_bcb_series(SELIC_SERIES_CODE, 'selic', start_date, end_date)
+    """Busca os dados da SELIC, com cache em arquivo CSV."""
+    os.makedirs('data', exist_ok=True)
+    file_path = 'data/SELIC.csv'
+
+    if _is_cache_valid(file_path):
+        print(f"Usando cache para SELIC de '{file_path}'.")
+        return pd.read_csv(file_path, index_col=0, parse_dates=True)
+
+    print("Baixando novos dados para SELIC...")
+    selic_df = download_bcb_series(SELIC_SERIES_CODE, 'selic', start_date, end_date)
+    if selic_df is not None and not selic_df.empty:
+        selic_df.to_csv(file_path)
+        print(f"Novos dados de SELIC salvos em '{file_path}'.")
+    return selic_df
 
 def download_stock_data(tickers, start_date, end_date):
-    """Baixa dados históricos de ações, com cache para evitar downloads desnecessários."""
+    """Baixa dados históricos de ações, com cache para cada ticker individualmente."""
     print("--- VERIFICANDO DADOS DE AÇÕES ---")
+    os.makedirs('data', exist_ok=True)
     
-    use_cache = False
-    if os.path.exists(STOCK_DATA_FILE):
-        last_modified_time = os.path.getmtime(STOCK_DATA_FILE)
-        if (datetime.now() - datetime.fromtimestamp(last_modified_time)).days < DATA_UPDATE_DAYS:
-            print(f"Usando dados de cache do arquivo '{STOCK_DATA_FILE}' (menos de {DATA_UPDATE_DAYS} dia(s) de idade).")
-            use_cache = True
+    all_data = {}
 
-    if use_cache:
-        data_historica = pd.read_csv(STOCK_DATA_FILE, header=[0, 1], index_col=0, parse_dates=True)
-    else:
-        print("Baixando novos dados de ações...")
-        try:
-            data_historica = yf.download(tickers, start=start_date, end=end_date, progress=True)
-            if data_historica.empty:
-                print("ERRO: Nenhum dado histórico de ações foi baixado.")
-                return None
-            # Salva os dados baixados em cache
-            data_historica.to_csv(STOCK_DATA_FILE)
-            print(f"Novos dados salvos em '{STOCK_DATA_FILE}'.")
-        except Exception as e:
-            print(f"ERRO CRÍTICO ao baixar dados do yfinance: {e}")
-            return None
+    for ticker in tickers:
+        file_path = f"data/{ticker}.csv"
+
+        if _is_cache_valid(file_path):
+            print(f"Usando cache para {ticker} de '{file_path}'.")
+            # Lê CSV com header multi-nível do yfinance
+            ticker_data = pd.read_csv(file_path, header=[0, 1], index_col=0, parse_dates=True)
+            # Remove o nível do ticker das colunas (segunda linha do header)
+            ticker_data.columns = ticker_data.columns.droplevel(1)
+        else:
+            print(f"Baixando novos dados para {ticker}...")
+            try:
+                ticker_data = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False, multi_level_index=False)
+                if ticker_data.empty:
+                    print(f"AVISO: Nenhum dado baixado para {ticker}. Pode ser um ticker inválido ou sem dados no período.")
+                    continue
+                ticker_data.to_csv(file_path)
+                print(f"Novos dados para {ticker} salvos em '{file_path}'.")
+            except Exception as e:
+                print(f"ERRO ao baixar dados para {ticker}: {e}")
+                continue
+
+        all_data[ticker] = ticker_data
+
+    if not all_data:
+        print("ERRO CRÍTICO: Falha ao carregar dados para todos os tickers.")
+        return None
+
+    # Combina os dados de todos os tickers em um único DataFrame com colunas MultiIndex
+    data_historica = pd.concat(all_data.values(), keys=all_data.keys(), axis=1)
+
+    # Inverte os níveis do MultiIndex para ter (metric, ticker) ao invés de (ticker, metric)
+    data_historica.columns = data_historica.columns.swaplevel(0, 1)
+    data_historica.sort_index(axis=1, inplace=True)
 
     # Garante que o preenchimento de dados ausentes seja sempre executado
     data_historica.ffill(inplace=True)
