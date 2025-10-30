@@ -4,7 +4,7 @@ Este projeto consiste em um script Python para realizar backtests de estratégia
 
 ## Visão Geral do Projeto
 
-O script `main.py` foi projetado para simular e analisar o desempenho de duas estratégias de investimento distintas em um portfólio de ações definido pelo usuário. Ele utiliza `yfinance` para baixar dados históricos de ações, `python-bcb` para buscar indicadores econômicos brasileiros (Selic e IPCA), `pandas` para análise de dados e `matplotlib` para visualizar os resultados.
+O script `main.py` foi projetado para simular e analisar o desempenho de duas estratégias de investimento distintas em um portfólio de ações definido pelo usuário. Ele utiliza `yfinance` para baixar dados históricos de ações, `python-bcb` para buscar indicadores econômicos brasileiros (CDI e IPCA), `pandas` para análise de dados e `matplotlib` para visualizar os resultados.
 
 ## Funcionalidades
 
@@ -13,14 +13,14 @@ O script executa dois cenários de backtesting distintos:
 1.  **Cenário 1: Aporte Único (Lump-Sum)**
     *   Simula um investimento de montante fixo inicial, distribuído igualmente entre uma lista predefinida de ações.
     *   Segue uma estratégia "buy and hold", reinvestindo automaticamente quaisquer dividendos recebidos.
-    *   O desempenho do portfólio é comparado com a taxa Selic e um benchmark de IPCA + x%.
+    *   O desempenho do portfólio é comparado com a taxa CDI e um benchmark de IPCA + x%.
 
 2.  **Cenário 2: Aportes Mensais**
     *   Começa com um saldo zero e simula contribuições mensais regulares.
     *   O valor da contribuição começa em um valor base (por exemplo, R$ 1000) e é ajustado mensalmente pela inflação (IPCA).
     *   Cada contribuição mensal é investida em um único ativo: aquele com o menor valor monetário total na carteira no momento do investimento.
     *   **Funcionalidade Freio de Arrumação:** Este cenário agora inclui um mecanismo de "freio de arrumação" inspirado na metodologia Bastter.com. Se um ativo receber mais de uma contribuição dentro de um período configurável, ele é colocado em "quarentena" por uma duração definida, evitando novos investimentos nele e, assim, prevenindo a concentração.
-    *   Este portfólio também é comparado com a Selic e um benchmark de IPCA + x%, considerando as mesmas contribuições mensais.
+    *   Este portfólio também é comparado com a CDI e um benchmark de IPCA + x%, considerando as mesmas contribuições mensais.
 
 ## Instalação
 

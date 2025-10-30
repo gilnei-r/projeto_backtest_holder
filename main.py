@@ -58,16 +58,16 @@ def main():
     if data_historica is None:
         return # Encerra se não houver dados de ações
 
-    selic_df = data_loader.get_selic_data(data_inicio, data_fim)
+    benchmark_df = data_loader.get_benchmark_data(data_inicio, data_fim)
     ipca_df = data_loader.get_ipca_data(data_inicio, data_fim)
 
     # --- Preparação dos Dados de Benchmark ---
-    selic_diaria, ipca_mensal = data_loader.prepare_benchmark_data(selic_df, ipca_df)
+    benchmark_diaria, ipca_mensal = data_loader.prepare_benchmark_data(benchmark_df, ipca_df)
 
     # --- Execução dos Cenários de Backtest ---
-    lump_sum_results = scenarios.run_lump_sum_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
-    monthly_results = scenarios.run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
-    cdb_results = scenarios.run_scenario_cdb_mixed(data_inicio, data_fim, config.APORTE_MENSAL_BASE, data_historica, selic_diaria, ipca_mensal, config.CDB_PERCENTAGE)
+    lump_sum_results = scenarios.run_lump_sum_backtest(data_historica, benchmark_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
+    monthly_results = scenarios.run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
+    cdb_results = scenarios.run_scenario_cdb_mixed(data_inicio, data_fim, config.APORTE_MENSAL_BASE, data_historica, benchmark_diaria, ipca_mensal, config.CDB_PERCENTAGE)
 
     # --- Salvamento e Visualização ---
     if lump_sum_results is not None and monthly_results is not None and cdb_results is not None:

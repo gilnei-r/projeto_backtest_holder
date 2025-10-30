@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
+from config import BENCHMARK_NAME
 
 def plot_ticker_distribution(monthly_results):
     """Gera um gráfico de barras com a distribuição de valor por ativo."""
@@ -37,8 +38,8 @@ def plot_results(lump_sum_results, monthly_results, cdb_results):
     # Gráfico 1: Cenário de Aporte Único
     fig1, ax1 = plt.subplots(figsize=(14, 8))
     ax1.plot(lump_sum_results.index, lump_sum_results['Total'], label='Carteira', color='blue', linewidth=2)
-    if 'Selic' in lump_sum_results and not lump_sum_results['Selic'].isna().all():
-        ax1.plot(lump_sum_results.index, lump_sum_results['Selic'], label='Selic', color='green', linestyle='--')
+    if BENCHMARK_NAME in lump_sum_results and not lump_sum_results[BENCHMARK_NAME].isna().all():
+        ax1.plot(lump_sum_results.index, lump_sum_results[BENCHMARK_NAME], label=BENCHMARK_NAME, color='green', linestyle='--')
     if 'IPCA_Benchmark' in lump_sum_results and not lump_sum_results['IPCA_Benchmark'].isna().all():
         ax1.plot(lump_sum_results.index, lump_sum_results['IPCA_Benchmark'], label='IPCA + 6%', color='purple', linestyle='-.')
     ax1.set_title('Cenário 1: Curva de Capital com Aporte Único', fontsize=18)
@@ -48,8 +49,8 @@ def plot_results(lump_sum_results, monthly_results, cdb_results):
     # Gráfico 2: Cenário de Aportes Mensais
     fig2, ax2 = plt.subplots(figsize=(14, 8))
     ax2.plot(monthly_results.index, monthly_results['Total'], label='Carteira', color='blue', linewidth=2)
-    if 'Selic' in monthly_results and not monthly_results['Selic'].isna().all():
-        ax2.plot(monthly_results.index, monthly_results['Selic'], label='Selic', color='green', linestyle='--')
+    if BENCHMARK_NAME in monthly_results and not monthly_results[BENCHMARK_NAME].isna().all():
+        ax2.plot(monthly_results.index, monthly_results[BENCHMARK_NAME], label=BENCHMARK_NAME, color='green', linestyle='--')
     if 'IPCA_Benchmark' in monthly_results and not monthly_results['IPCA_Benchmark'].isna().all():
         ax2.plot(monthly_results.index, monthly_results['IPCA_Benchmark'], label='IPCA + 6%', color='purple', linestyle='-.')
     ax2.plot(monthly_results.index, monthly_results['Total Investido'], label='Total Investido', color='red', linestyle=':')
@@ -89,8 +90,8 @@ def plot_cdb_mixed_scenario(results_df):
     """Gera o gráfico para o cenário de aportes com alocação em CDB."""
     fig, ax = plt.subplots(figsize=(14, 8))
     ax.plot(results_df.index, results_df['Total'], label='Carteira', color='blue', linewidth=2)
-    if 'Selic' in results_df and not results_df['Selic'].isna().all():
-        ax.plot(results_df.index, results_df['Selic'], label='Selic', color='green', linestyle='--')
+    if BENCHMARK_NAME in results_df and not results_df[BENCHMARK_NAME].isna().all():
+        ax.plot(results_df.index, results_df[BENCHMARK_NAME], label=BENCHMARK_NAME, color='green', linestyle='--')
     if 'IPCA_Benchmark' in results_df and not results_df['IPCA_Benchmark'].isna().all():
         ax.plot(results_df.index, results_df['IPCA_Benchmark'], label='IPCA + 6%', color='purple', linestyle='-.')
     ax.plot(results_df.index, results_df['Total Investido'], label='Total Investido', color='red', linestyle=':')
