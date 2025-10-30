@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 
 import pandas as pd
 import numpy as np
 import config
-from config import IPCA_BENCHMARK_X
 
 # --- Funções Auxiliares ---
 
@@ -13,7 +12,7 @@ def calculate_cagr(start_value, end_value, years):
         return 0
     return (end_value / start_value) ** (1 / years) - 1
 
-def run_lump_sum_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim):
+def run_lump_sum_backtest(data_historica, benchmark_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim):
     """Executa o backtest para o cenário de Aporte Único."""
     print("\n--- CENÁRIO 1: APORTE ÚNICO INICIAL ---")
     all_dates = pd.date_range(start=data_inicio, end=data_fim, freq='D')
@@ -41,9 +40,9 @@ def run_lump_sum_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa,
     curva_de_capital.fillna(0, inplace=True)
     curva_de_capital['Total'] = curva_de_capital[valid_tickers].sum(axis=1)
 
-    if selic_diaria is not None:
-        selic_acumulada = selic_diaria.cumprod()
-        curva_de_capital['Selic'] = investimento_total_inicial * selic_acumulada.reindex(all_dates, method='ffill')
+    if benchmark_diaria is not None:
+        benchmark_acumulada = benchmark_diaria.cumprod()
+        curva_de_capital[config.BENCHMARK_NAME] = investimento_total_inicial * benchmark_acumulada.reindex(all_dates, method='ffill')
 
     curva_de_capital = calculate_ipca_benchmark(curva_de_capital, ipca_mensal, investimento_total_inicial)
 
@@ -53,13 +52,13 @@ def run_lump_sum_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa,
     print(f"Período: {data_inicio} a {data_fim} ({anos:.1f} anos)")
     print(f"Investimento Inicial: R$ {investimento_total_inicial:,.2f}")
     print(f"Carteira: R$ {valor_final_carteira:,.2f} | CAGR: {calculate_cagr(investimento_total_inicial, valor_final_carteira, anos):.2%}")
-    if 'Selic' in curva_de_capital and not curva_de_capital['Selic'].isna().all():
-        valor_final_selic = curva_de_capital['Selic'].iloc[-1]
-        print(f"Selic:    R$ {valor_final_selic:,.2f} | CAGR: {calculate_cagr(investimento_total_inicial, valor_final_selic, anos):.2%}")
+    if config.BENCHMARK_NAME in curva_de_capital and not curva_de_capital[config.BENCHMARK_NAME].isna().all():
+        valor_final_benchmark = curva_de_capital[config.BENCHMARK_NAME].iloc[-1]
+        print(f"{config.BENCHMARK_NAME}:    R$ {valor_final_benchmark:,.2f} | CAGR: {calculate_cagr(investimento_total_inicial, valor_final_benchmark, anos):.2%}")
 
     return curva_de_capital
 
-def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim):
+def run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim):
     """Executa o backtest para o cenário de Aportes Mensais."""
     print("\n\n--- CENÁRIO 2: APORTES MENSAIS CORRIGIDOS PELO IPCA ---")
     if config.FREIO_ATIVO:
@@ -69,7 +68,7 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
     valid_tickers = [col for col in tickers_sa if col in data_historica['Close'].columns and not data_historica['Close'][col].dropna().empty]
     
     # Correção: Inicia colunas 'Aporte' e 'Ativo Aportado' com NaN para permitir o preenchimento (ffill)
-    columns_to_initialize_zero = valid_tickers + ['Total', 'Selic', 'Total Investido']
+    columns_to_initialize_zero = valid_tickers + ['Total', config.BENCHMARK_NAME, 'Total Investido']
     portfolio_mensal = pd.DataFrame(0.0, index=all_dates, columns=columns_to_initialize_zero)
     portfolio_mensal['Aporte'] = np.nan
     portfolio_mensal['Ativo Aportado'] = np.nan
@@ -95,7 +94,7 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
                 for ticker in valid_tickers:
                     portfolio_mensal.loc[dia, ticker] = portfolio_mensal.loc[:dia, ticker].iloc[-2] if len(portfolio_mensal.loc[:dia, ticker]) > 1 else 0
                 portfolio_mensal.loc[dia, 'Total'] = portfolio_mensal.loc[:dia, 'Total'].iloc[-2] if len(portfolio_mensal.loc[:dia, 'Total']) > 1 else 0
-                portfolio_mensal.loc[dia, 'Selic'] = valor_selic
+                portfolio_mensal.loc[dia, config.BENCHMARK_NAME] = valor_selic
                 portfolio_mensal.loc[dia, 'Total Investido'] = total_investido
             continue
 
@@ -176,8 +175,8 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
                                 # Aumenta a próxima duração da quarentena para este ativo
                                 quarentena_duracao[ticker] += config.FREIO_QUARENTENA_ADICIONAL
         
-        if selic_diaria is not None and dia in selic_diaria.index:
-            valor_selic *= selic_diaria.loc[dia]
+        if benchmark_diaria is not None and dia in benchmark_diaria.index:
+            valor_selic *= benchmark_diaria.loc[dia]
 
         valor_total_dia = 0
         for ticker in valid_tickers:
@@ -190,7 +189,7 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
                 valor_total_dia += valor_ativo
 
         portfolio_mensal.loc[dia, 'Total'] = valor_total_dia
-        portfolio_mensal.loc[dia, 'Selic'] = valor_selic
+        portfolio_mensal.loc[dia, config.BENCHMARK_NAME] = valor_selic
         portfolio_mensal.loc[dia, 'Total Investido'] = total_investido
 
     portfolio_mensal.ffill(inplace=True)
@@ -204,9 +203,9 @@ def run_monthly_contributions_backtest(data_historica, selic_diaria, ipca_mensal
     print(f"Total Investido (corrigido): R$ {total_investido_final:,.2f}")
     if total_investido_final > 0:
         print(f"Carteira: R$ {valor_final_carteira_m:,.2f} | Retorno sobre Investimento: {valor_final_carteira_m / total_investido_final - 1:.2%}")
-        if 'Selic' in portfolio_mensal and not portfolio_mensal['Selic'].isna().all():
-            valor_final_selic_m = portfolio_mensal['Selic'].iloc[-1]
-            print(f"Selic:    R$ {valor_final_selic_m:,.2f} | Retorno sobre Investimento: {valor_final_selic_m / total_investido_final - 1:.2%}")
+        if config.BENCHMARK_NAME in portfolio_mensal and not portfolio_mensal[config.BENCHMARK_NAME].isna().all():
+            valor_final_benchmark_m = portfolio_mensal[config.BENCHMARK_NAME].iloc[-1]
+            print(f"{config.BENCHMARK_NAME}:    R$ {valor_final_benchmark_m:,.2f} | Retorno sobre Investimento: {valor_final_benchmark_m / total_investido_final - 1:.2%}")
     else:
         print(f"Carteira: R$ {valor_final_carteira_m:,.2f}")
         print("AVISO: Nenhum aporte foi processado.")
@@ -219,16 +218,28 @@ def calculate_ipca_benchmark(portfolio_df, ipca_mensal, initial_investment):
         return portfolio_df
 
     # Converte a taxa de juros real anual para uma taxa diária
-    taxa_juros_real_anual = IPCA_BENCHMARK_X / 100.0
-    taxa_juros_real_diaria = (1 + taxa_juros_real_anual) ** (1 / 252) - 1
+    taxa_juros_real_anual = config.IPCA_BENCHMARK_X / 100.0
+    if taxa_juros_real_anual == 0:
+        taxa_juros_real_diaria = 0.0
+    else:
+        taxa_juros_real_diaria = (1 + taxa_juros_real_anual) ** (1 / 252) - 1
 
     # Prepara o dataframe do benchmark
     benchmark_df = pd.DataFrame(index=portfolio_df.index)
     benchmark_df['ipca'] = ipca_mensal.reindex(benchmark_df.index, method='ffill')
     benchmark_df.fillna(0, inplace=True)
 
-    # Calcula o fator de correção diário (IPCA + juros real)
-    fator_diario = (1 + benchmark_df['ipca'] / 100) ** (1 / 21) * (1 + taxa_juros_real_diaria)
+    # Identifica o último dia de cada mês no índice
+    is_last_day_of_month = benchmark_df.index.to_series().dt.is_month_end
+
+    # O fator de correção do IPCA é aplicado apenas no último dia do mês.
+    ipca_fator = (1 + benchmark_df['ipca'] / 100).where(is_last_day_of_month, 1)
+
+    # O juro real é aplicado diariamente.
+    juro_real_fator = (1 + taxa_juros_real_diaria)
+
+    # Combina os fatores
+    fator_diario = ipca_fator * juro_real_fator
     
     # Calcula o benchmark acumulado
     benchmark_acumulado = fator_diario.cumprod()
@@ -238,17 +249,17 @@ def calculate_ipca_benchmark(portfolio_df, ipca_mensal, initial_investment):
     
     return portfolio_df
 
-def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio_data, selic_data, ipca_data, cdb_percentage):
+def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio_data, benchmark_data, ipca_data, cdb_percentage):
     """Executa o backtest para o cenário com alocação em CDB."""
     print("\n\n--- CENÁRIO 3: APORTES MENSAIS COM ALOCAÇÃO EM CDB ---")
 
     all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
     valid_tickers = [col for col in config.TICKERS_EMPRESAS if col in portfolio_data['Close'].columns and not portfolio_data['Close'][col].dropna().empty]
     
-    columns = valid_tickers + ['CDB', 'Total', 'Selic', 'Total Investido', 'Aporte', 'Ativo Aportado']
+    columns = valid_tickers + ['CDB', 'Total', config.BENCHMARK_NAME, 'Total Investido']
     results_df = pd.DataFrame(0.0, index=all_dates, columns=columns)
     results_df['Aporte'] = np.nan
-    results_df['Ativo Aportado'] = np.nan
+    results_df['Ativo Aportado'] = pd.NA  # Initialize with pandas NA to allow proper string handling
 
     num_shares = {ticker: 0.0 for ticker in valid_tickers}
     cdb_value = 0.0
@@ -256,17 +267,28 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
     valor_selic_benchmark = 0.0
     last_month_processed = None
 
+    # --- Variáveis para o Freio Automático (Cenário 3) ---
+    aportes_recentes = {ticker: [] for ticker in valid_tickers}
+    quarentena = {ticker: None for ticker in valid_tickers}
+    quarentena_duracao = {ticker: config.FREIO_QUARENTENA_INICIAL for ticker in valid_tickers}
+    # ----------------------------------------------------
+
     ipca_acumulado = (1 + ipca_data).cumprod().reindex(all_dates, method='ffill').fillna(1) if ipca_data is not None else pd.Series(1, index=all_dates)
 
     print("Processando backtest com aportes mensais e alocação em CDB...")
     for dia in all_dates:
+        # Apply daily interest to CDB and benchmark at the beginning of the day
+        if benchmark_data is not None and dia in benchmark_data.index:
+            cdb_value *= benchmark_data.loc[dia]
+            valor_selic_benchmark *= benchmark_data.loc[dia]
+
         if dia not in portfolio_data.index:
             if dia > all_dates[0]:
                 for ticker in valid_tickers:
                     results_df.loc[dia, ticker] = results_df.loc[dia - pd.Timedelta(days=1), ticker]
                 results_df.loc[dia, 'CDB'] = cdb_value
                 results_df.loc[dia, 'Total'] = results_df.loc[dia - pd.Timedelta(days=1), 'Total']
-                results_df.loc[dia, 'Selic'] = valor_selic_benchmark
+                results_df.loc[dia, config.BENCHMARK_NAME] = valor_selic_benchmark
                 results_df.loc[dia, 'Total Investido'] = total_investido
             continue
 
@@ -279,7 +301,7 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
             results_df.loc[dia, 'Aporte'] = aporte_corrigido
 
             total_portfolio_value = sum(num_shares[ticker] * portfolio_data.loc[dia, ('Close', ticker)] for ticker in valid_tickers if pd.notna(portfolio_data.loc[dia, ('Close', ticker)])) + cdb_value
-            
+
             # Lógica de alocação
             if (total_portfolio_value > 0 and (cdb_value / total_portfolio_value) < cdb_percentage) or total_portfolio_value == 0:
                 cdb_value += aporte_corrigido
@@ -297,11 +319,6 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
                         num_shares[ativo_menor_valor] += aporte_corrigido / preco
                         results_df.loc[dia, 'Ativo Aportado'] = ativo_menor_valor
 
-        # Atualiza valor do CDB com a Selic diária
-        if selic_data is not None and dia in selic_data.index:
-            cdb_value *= selic_data.loc[dia]
-            valor_selic_benchmark *= selic_data.loc[dia]
-
         # Atualiza valores diários do portfólio
         valor_total_dia = 0
         for ticker in valid_tickers:
@@ -316,10 +333,12 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
         results_df.loc[dia, 'CDB'] = cdb_value
         valor_total_dia += cdb_value
         results_df.loc[dia, 'Total'] = valor_total_dia
-        results_df.loc[dia, 'Selic'] = valor_selic_benchmark
+        results_df.loc[dia, config.BENCHMARK_NAME] = valor_selic_benchmark
         results_df.loc[dia, 'Total Investido'] = total_investido
 
-    results_df.ffill(inplace=True)
+    # Forward-fill numeric columns but not contribution tracking columns
+    numeric_cols = valid_tickers + ['CDB', 'Total', config.BENCHMARK_NAME, 'Total Investido']
+    results_df[numeric_cols] = results_df[numeric_cols].ffill()
     results_df = calculate_ipca_benchmark(results_df, ipca_data, results_df['Total Investido'])
     
     # Resultados finais
@@ -331,9 +350,9 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
     print(f"Total Investido (corrigido): R$ {total_investido_final:,.2f}")
     if total_investido_final > 0:
         print(f"Carteira: R$ {valor_final_carteira:,.2f} | Retorno sobre Investimento: {valor_final_carteira / total_investido_final - 1:.2%}")
-        if 'Selic' in results_df and not results_df['Selic'].isna().all():
-            valor_final_selic_m = results_df['Selic'].iloc[-1]
-            print(f"Selic (Benchmark): R$ {valor_final_selic_m:,.2f} | Retorno sobre Investimento: {valor_final_selic_m / total_investido_final - 1:.2%}")
+        if config.BENCHMARK_NAME in results_df and not results_df[config.BENCHMARK_NAME].isna().all():
+            valor_final_benchmark_m = results_df[config.BENCHMARK_NAME].iloc[-1]
+            print(f"{config.BENCHMARK_NAME} (Benchmark): R$ {valor_final_benchmark_m:,.2f} | Retorno sobre Investimento: {valor_final_benchmark_m / total_investido_final - 1:.2%}")
     else:
         print(f"Carteira: R$ {valor_final_carteira:,.2f}")
 

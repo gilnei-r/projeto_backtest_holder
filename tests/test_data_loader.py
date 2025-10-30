@@ -12,9 +12,9 @@ from data_loader import (
     _is_cache_valid,
     download_stock_data,
     get_ipca_data,
-    get_selic_data
+    get_benchmark_data
 )
-from config import DATA_UPDATE_DAYS
+from config import DATA_UPDATE_DAYS, BENCHMARK_NAME, BENCHMARK_SERIES_CODE
 
 class TestDataCaching(unittest.TestCase):
 
@@ -57,7 +57,7 @@ class TestDataCaching(unittest.TestCase):
         
         download_stock_data(['PETR4.SA'], '2020-01-01', '2020-01-31')
         
-        mock_read_csv.assert_called_once_with('data/PETR4.SA.csv', index_col=0, parse_dates=True)
+        mock_read_csv.assert_called_once_with('data/PETR4.SA.csv', header=0, index_col=0, parse_dates=True)
         mock_yf_download.assert_not_called()
 
     @patch('data_loader.yf.download')
@@ -100,6 +100,34 @@ class TestDataCaching(unittest.TestCase):
             
             mock_download_bcb.assert_called_once()
             mock_to_csv.assert_called_once_with('data/IPCA.csv')
+
+class TestBenchmarkData(unittest.TestCase):
+
+    @patch('data_loader.download_bcb_series')
+    @patch('data_loader.pd.read_csv')
+    @patch('data_loader._is_cache_valid')
+    def test_get_benchmark_data_uses_cache(self, mock_is_cache_valid, mock_read_csv, mock_download_bcb):
+        """Verify benchmark download uses cache if valid."""
+        mock_is_cache_valid.return_value = True
+        
+        get_benchmark_data('2020-01-01', '2020-01-31')
+        
+        mock_read_csv.assert_called_once_with(f'data/{BENCHMARK_NAME}.csv', index_col=0, parse_dates=True)
+        mock_download_bcb.assert_not_called()
+
+    @patch('data_loader.download_bcb_series')
+    @patch('data_loader._is_cache_valid')
+    def test_get_benchmark_data_downloads_when_no_cache(self, mock_is_cache_valid, mock_download_bcb):
+        """Verify benchmark download happens when cache is invalid."""
+        mock_is_cache_valid.return_value = False
+        mock_df = pd.DataFrame({BENCHMARK_NAME.lower(): [0.5, 0.6]})
+        mock_download_bcb.return_value = mock_df
+        
+        with patch.object(mock_df, 'to_csv') as mock_to_csv:
+            get_benchmark_data('2020-01-01', '2020-01-31')
+            
+            mock_download_bcb.assert_called_once_with(BENCHMARK_SERIES_CODE, BENCHMARK_NAME.lower(), '2020-01-01', '2020-01-31')
+            mock_to_csv.assert_called_once_with(f'data/{BENCHMARK_NAME}.csv')
 
 if __name__ == '__main__':
     unittest.main()

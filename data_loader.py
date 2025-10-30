@@ -6,12 +6,11 @@ import pandas as pd
 import yfinance as yf
 from bcb import sgs
 from datetime import datetime, timedelta
-from config import DATA_UPDATE_DAYS
+from config import DATA_UPDATE_DAYS, BENCHMARK_SERIES_CODE, BENCHMARK_NAME
 
 # --- Constantes de Arquivos e Séries ---
 STOCK_DATA_FILE = "stock_data.csv"
 IPCA_SERIES_CODE = 433
-SELIC_SERIES_CODE = 432
 
 def _is_cache_valid(file_path):
     """Verifica se um arquivo de cache é válido com base na data de modificação."""
@@ -80,21 +79,21 @@ def get_ipca_data(start_date, end_date):
         print(f"Novos dados de IPCA salvos em '{file_path}'.")
     return ipca_df
 
-def get_selic_data(start_date, end_date):
-    """Busca os dados da SELIC, com cache em arquivo CSV."""
+def get_benchmark_data(start_date, end_date):
+    """Busca os dados do benchmark (CDI ou SELIC), com cache em arquivo CSV."""
     os.makedirs('data', exist_ok=True)
-    file_path = 'data/SELIC.csv'
+    file_path = f'data/{BENCHMARK_NAME}.csv'
 
     if _is_cache_valid(file_path):
-        print(f"Usando cache para SELIC de '{file_path}'.")
+        print(f"Usando cache para {BENCHMARK_NAME} de '{file_path}'.")
         return pd.read_csv(file_path, index_col=0, parse_dates=True)
 
-    print("Baixando novos dados para SELIC...")
-    selic_df = download_bcb_series(SELIC_SERIES_CODE, 'selic', start_date, end_date)
-    if selic_df is not None and not selic_df.empty:
-        selic_df.to_csv(file_path)
-        print(f"Novos dados de SELIC salvos em '{file_path}'.")
-    return selic_df
+    print(f"Baixando novos dados para {BENCHMARK_NAME}...")
+    benchmark_df = download_bcb_series(BENCHMARK_SERIES_CODE, BENCHMARK_NAME.lower(), start_date, end_date)
+    if benchmark_df is not None and not benchmark_df.empty:
+        benchmark_df.to_csv(file_path)
+        print(f"Novos dados de {BENCHMARK_NAME} salvos em '{file_path}'.")
+    return benchmark_df
 
 def download_stock_data(tickers, start_date, end_date):
     """Baixa dados históricos de ações, com cache para cada ticker individualmente."""
@@ -108,10 +107,8 @@ def download_stock_data(tickers, start_date, end_date):
 
         if _is_cache_valid(file_path):
             print(f"Usando cache para {ticker} de '{file_path}'.")
-            # Lê CSV com header multi-nível do yfinance
-            ticker_data = pd.read_csv(file_path, header=[0, 1], index_col=0, parse_dates=True)
-            # Remove o nível do ticker das colunas (segunda linha do header)
-            ticker_data.columns = ticker_data.columns.droplevel(1)
+            # Lê CSV com header de nível único, pois cada arquivo corresponde a um ticker
+            ticker_data = pd.read_csv(file_path, header=0, index_col=0, parse_dates=True)
         else:
             print(f"Baixando novos dados para {ticker}...")
             try:
@@ -143,8 +140,8 @@ def download_stock_data(tickers, start_date, end_date):
     print("Dados de ações carregados e processados.")
     return data_historica
 
-def prepare_benchmark_data(selic_df, ipca_df):
-    """Prepara os dados de benchmark (Selic e IPCA)."""
-    selic_diaria = (1 + selic_df['selic'] / 100) ** (1/252) if selic_df is not None else None
+def prepare_benchmark_data(benchmark_df, ipca_df):
+    """Prepara os dados de benchmark (CDI/Selic e IPCA)."""
+    benchmark_diaria = (1 + benchmark_df[BENCHMARK_NAME.lower()] / 100)# ** (1/252) if benchmark_df is not None else None
     ipca_mensal = ipca_df['ipca'] / 100 if ipca_df is not None else None
-    return selic_diaria, ipca_mensal
+    return benchmark_diaria, ipca_mensal

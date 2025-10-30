@@ -44,7 +44,7 @@ TICKERS_EMPRESAS = [
 ]
 
 # Data de início do backtest no formato "AAAA-MM-DD".
-DATA_INICIO = "2025-01-01"
+DATA_INICIO = "2015-01-01"
 
 # Data de fim do backtest. Por padrão, usa a data de hoje.
 DATA_FIM = datetime.today().strftime('%Y-%m-%d')
@@ -55,6 +55,11 @@ DATA_UPDATE_DAYS = 1
 
 
 # --- Configuração de Benchmarks ---
+
+# Código da série no SGS do Banco Central para o benchmark primário.
+# 11 para SELIC, 12 para CDI.
+BENCHMARK_SERIES_CODE = 12
+BENCHMARK_NAME = "CDI"
 
 # Taxa adicional (em %) a ser somada ao IPCA para o benchmark de inflação.
 # Ex: 6.0 para IPCA + 6%

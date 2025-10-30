@@ -1,25 +1,25 @@
-# GEMINI.md
+﻿# GEMINI.md
 
 ## Project Overview
 
-This project consists of a Python script, `main.py`, designed to perform backtests of stock investment strategies. It uses `yfinance` to download historical stock data, `python-bcb` to fetch Brazilian economic indicators (Selic and IPCA), `pandas` for data analysis, and `matplotlib` to visualize the results.
+This project consists of a Python script, `main.py`, designed to perform backtests of stock investment strategies. It uses `yfinance` to download historical stock data, `python-bcb` to fetch Brazilian economic indicators (CDI and IPCA), `pandas` for data analysis, and `matplotlib` to visualize the results.
 
 The script runs three distinct backtesting scenarios:
 
 1.  **Scenario 1: Lump-Sum Investment**
     *   This simulation invests a fixed initial amount, distributed equally among a predefined list of stocks.
     *   It follows a "buy and hold" strategy, automatically reinvesting any dividends received.
-    *   The portfolio's performance is benchmarked against the Selic rate and an IPCA + x% benchmark.
+    *   The portfolio's performance is benchmarked against the CDI rate and an IPCA + x% benchmark.
 
 2.  **Scenario 2: Monthly Contributions**
     *   This simulation starts with a zero balance and makes regular monthly contributions.
     *   The contribution amount starts at a base value (e.g., R$1000) and is adjusted for inflation each month using the IPCA index.
     *   Each monthly contribution is invested into a single asset: the one with the lowest total monetary value in the portfolio at the time of investment.
     *   **Automatic Brake Feature:** This scenario now includes a "freio de arrumação" (automatic brake) mechanism inspired by the Bastter.com methodology. If an asset receives more than one contribution within a configurable period, it is placed in a "quarantine" for a set duration, preventing further investment in it and thus avoiding concentration.
-    *   This portfolio is also benchmarked against Selic and an IPCA + x% benchmark, considering the same monthly contributions.
+    *   This portfolio is also benchmarked against CDI and an IPCA + x% benchmark, considering the same monthly contributions.
 
 3.  **Scenario 3: Monthly Contributions with CDB Allocation**
-    *   This scenario is similar to Scenario 2 but introduces a fixed-income asset (simulating a CDB linked to the SELIC rate) into the portfolio.
+    *   This scenario is similar to Scenario 2 but introduces a fixed-income asset (simulating a CDB linked to the CDI rate) into the portfolio.
     *   A target percentage for the CDB allocation is defined in the `config.py` file.
     *   Each month, the script checks if the current value of the CDB asset is below the target percentage. If it is, the entire monthly contribution is allocated to the CDB. Otherwise, the contribution follows the logic of Scenario 2.
 
