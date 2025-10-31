@@ -129,5 +129,63 @@ class TestBenchmarkData(unittest.TestCase):
             mock_download_bcb.assert_called_once_with(BENCHMARK_SERIES_CODE, BENCHMARK_NAME.lower(), '2020-01-01', '2020-01-31')
             mock_to_csv.assert_called_once_with(f'data/{BENCHMARK_NAME}.csv')
 
+import config
+
+class TestFallbackMechanism(unittest.TestCase):
+
+    @patch('data_loader._is_cache_valid', return_value=False)
+    @patch('data_loader.yf.download')
+    @patch('data_loader.download_mt5_data')
+    def test_yfinance_success_no_fallback(self, mock_download_mt5, mock_yf_download, mock_is_cache_valid):
+        """Test that MT5 is not called when yfinance succeeds."""
+        mock_yf_download.return_value = pd.DataFrame({'Close': [10, 11]})
+        
+        _, failed_tickers = download_stock_data(['PETR4.SA'], '2020-01-01', '2020-01-31')
+        
+        mock_yf_download.assert_called_once()
+        mock_download_mt5.assert_not_called()
+        self.assertEqual(len(failed_tickers), 0)
+
+    @patch('data_loader._is_cache_valid', return_value=False)
+    @patch('data_loader.yf.download', side_effect=Exception("yfinance error"))
+    @patch('data_loader.download_mt5_data')
+    def test_yfinance_fail_mt5_success(self, mock_download_mt5, mock_yf_download, mock_is_cache_valid):
+        """Test that MT5 is called when yfinance fails and MT5 succeeds."""
+        config.USE_MT5 = True
+        mock_download_mt5.return_value = pd.DataFrame({'Close': [10, 11]})
+        
+        _, failed_tickers = download_stock_data(['PETR4.SA'], '2020-01-01', '2020-01-31')
+        
+        mock_yf_download.assert_called_once()
+        mock_download_mt5.assert_called_once()
+        self.assertEqual(len(failed_tickers), 0)
+
+    @patch('data_loader._is_cache_valid', return_value=False)
+    @patch('data_loader.yf.download', side_effect=Exception("yfinance error"))
+    @patch('data_loader.download_mt5_data', return_value=None)
+    def test_yfinance_fail_mt5_fail(self, mock_download_mt5, mock_yf_download, mock_is_cache_valid):
+        """Test that a ticker is added to the failed list when both yfinance and MT5 fail."""
+        config.USE_MT5 = True
+        
+        _, failed_tickers = download_stock_data(['PETR4.SA'], '2020-01-01', '2020-01-31')
+        
+        mock_yf_download.assert_called_once()
+        mock_download_mt5.assert_called_once()
+        self.assertEqual(len(failed_tickers), 1)
+        self.assertEqual(failed_tickers[0], 'PETR4.SA')
+
+    @patch('data_loader._is_cache_valid', return_value=False)
+    @patch('data_loader.yf.download', side_effect=Exception("yfinance error"))
+    @patch('data_loader.download_mt5_data')
+    def test_fallback_disabled(self, mock_download_mt5, mock_yf_download, mock_is_cache_valid):
+        """Test that MT5 is not called when the fallback is disabled in the config."""
+        config.USE_MT5 = False
+        
+        _, failed_tickers = download_stock_data(['PETR4.SA'], '2020-01-01', '2020-01-31')
+        
+        mock_yf_download.assert_called_once()
+        mock_download_mt5.assert_not_called()
+        self.assertEqual(len(failed_tickers), 1)
+
 if __name__ == '__main__':
     unittest.main()

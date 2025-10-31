@@ -6,6 +6,8 @@ import pandas as pd
 import yfinance as yf
 from bcb import sgs
 from datetime import datetime, timedelta
+import MetaTrader5 as mt5
+import config
 from config import DATA_UPDATE_DAYS, BENCHMARK_SERIES_CODE, BENCHMARK_NAME
 
 # --- Constantes de Arquivos e Séries ---
@@ -20,6 +22,41 @@ def _is_cache_valid(file_path):
     if (datetime.now() - datetime.fromtimestamp(last_modified_time)).days < DATA_UPDATE_DAYS:
         return True
     return False
+
+def connect_mt5():
+    """Conecta ao terminal MetaTrader 5."""
+    for i in range(config.MT5_RETRIES):
+        if mt5.initialize():
+            print("Conectado ao MetaTrader 5.")
+            return True
+        else:
+            print(f"Falha ao conectar ao MetaTrader 5, tentativa {i+1}/{config.MT5_RETRIES}.")
+            time.sleep(config.MT5_TIMEOUT)
+    print("Não foi possível conectar ao MetaTrader 5.")
+    return False
+
+def download_mt5_data(ticker, start_date, end_date):
+    """Baixa dados históricos do MetaTrader 5."""
+    if not connect_mt5():
+        return None
+
+    rates = mt5.copy_rates_from_pos(ticker, mt5.TIMEFRAME_D1, 0, 99999)
+    mt5.shutdown()
+
+    if rates is None:
+        print(f"Nenhum dado encontrado para {ticker} no MetaTrader 5.")
+        return None
+
+    df = pd.DataFrame(rates)
+    df['time'] = pd.to_datetime(df['time'], unit='s')
+    df.set_index('time', inplace=True)
+    df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'tick_volume': 'Volume'}, inplace=True)
+    df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
+    
+    # O MT5 não fornece dados de dividendos, então criamos uma coluna de zeros.
+    df['Dividends'] = 0.0
+    
+    return df
 
 def download_bcb_series(series_code, series_name, start_date, end_date, chunk_years=3):
     """Baixa séries temporais do BCB com lógica de retentativa e chunking."""
@@ -101,32 +138,44 @@ def download_stock_data(tickers, start_date, end_date):
     os.makedirs('data', exist_ok=True)
     
     all_data = {}
+    failed_tickers = []
 
     for ticker in tickers:
         file_path = f"data/{ticker}.csv"
+        ticker_data = None
 
         if _is_cache_valid(file_path):
             print(f"Usando cache para {ticker} de '{file_path}'.")
-            # Lê CSV com header de nível único, pois cada arquivo corresponde a um ticker
             ticker_data = pd.read_csv(file_path, header=0, index_col=0, parse_dates=True)
         else:
-            print(f"Baixando novos dados para {ticker}...")
+            print(f"Baixando novos dados para {ticker} via yfinance...")
             try:
                 ticker_data = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False, multi_level_index=False)
                 if ticker_data.empty:
-                    print(f"AVISO: Nenhum dado baixado para {ticker}. Pode ser um ticker inválido ou sem dados no período.")
-                    continue
+                    print(f"AVISO: Nenhum dado baixado para {ticker} via yfinance.")
+                    ticker_data = None
+            except Exception as e:
+                print(f"ERRO ao baixar dados para {ticker} via yfinance: {e}")
+                ticker_data = None
+
+            if ticker_data is None and config.USE_MT5:
+                mt5_ticker = ticker.replace('.SA', '')
+                print(f"Tentando baixar {mt5_ticker} via MetaTrader 5...")
+                ticker_data = download_mt5_data(mt5_ticker, start_date, end_date)
+
+            if ticker_data is not None and not ticker_data.empty:
                 ticker_data.to_csv(file_path)
                 print(f"Novos dados para {ticker} salvos em '{file_path}'.")
-            except Exception as e:
-                print(f"ERRO ao baixar dados para {ticker}: {e}")
+            else:
+                failed_tickers.append(ticker)
                 continue
 
-        all_data[ticker] = ticker_data
+        if ticker_data is not None:
+            all_data[ticker] = ticker_data
 
     if not all_data:
         print("ERRO CRÍTICO: Falha ao carregar dados para todos os tickers.")
-        return None
+        return None, failed_tickers
 
     # Combina os dados de todos os tickers em um único DataFrame com colunas MultiIndex
     data_historica = pd.concat(all_data.values(), keys=all_data.keys(), axis=1)
@@ -138,10 +187,10 @@ def download_stock_data(tickers, start_date, end_date):
     # Garante que o preenchimento de dados ausentes seja sempre executado
     data_historica.ffill(inplace=True)
     print("Dados de ações carregados e processados.")
-    return data_historica
+    return data_historica, failed_tickers
 
 def prepare_benchmark_data(benchmark_df, ipca_df):
     """Prepara os dados de benchmark (CDI/Selic e IPCA)."""
-    benchmark_diaria = (1 + benchmark_df[BENCHMARK_NAME.lower()] / 100)# ** (1/252) if benchmark_df is not None else None
+    benchmark_diaria = (1 + benchmark_df[BENCHMARK_NAME.lower()] / 100)
     ipca_mensal = ipca_df['ipca'] / 100 if ipca_df is not None else None
     return benchmark_diaria, ipca_mensal

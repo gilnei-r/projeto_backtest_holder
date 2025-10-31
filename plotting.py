@@ -5,11 +5,11 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 from config import BENCHMARK_NAME
+import os
+import config
 
-def plot_ticker_distribution(monthly_results):
+def plot_ticker_distribution(monthly_results, ax):
     """Gera um gráfico de barras com a distribuição de valor por ativo."""
-    fig, ax = plt.subplots(figsize=(14, 8))
-    
     # Pega a última linha de dados para os valores finais
     final_values = monthly_results.iloc[-1]
     
@@ -32,9 +32,12 @@ def plot_ticker_distribution(monthly_results):
         ax.set_title('Distribuição de Valor por Ativo', fontsize=18)
 
 def plot_results(lump_sum_results, monthly_results, cdb_results):
-    """Gera e exibe os gráficos dos resultados."""
+    """Gera e salva os gráficos dos resultados."""
     print("Gerando gráficos...")
     
+    if config.SAVE_PLOTS:
+        os.makedirs(config.PLOT_DIR, exist_ok=True)
+
     # Gráfico 1: Cenário de Aporte Único
     fig1, ax1 = plt.subplots(figsize=(14, 8))
     ax1.plot(lump_sum_results.index, lump_sum_results['Total'], label='Carteira', color='blue', linewidth=2)
@@ -45,6 +48,9 @@ def plot_results(lump_sum_results, monthly_results, cdb_results):
     ax1.set_title('Cenário 1: Curva de Capital com Aporte Único', fontsize=18)
     ax1.set_xlabel('Data'); ax1.set_ylabel('Valor da Carteira (R$)'); ax1.legend(loc='upper left')
     ax1.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))
+    if config.SAVE_PLOTS:
+        fig1.savefig(os.path.join(config.PLOT_DIR, 'cenario_1_aporte_unico.png'))
+        plt.close(fig1)
 
     # Gráfico 2: Cenário de Aportes Mensais
     fig2, ax2 = plt.subplots(figsize=(14, 8))
@@ -57,12 +63,19 @@ def plot_results(lump_sum_results, monthly_results, cdb_results):
     ax2.set_title('Cenário 2: Curva de Capital com Aportes Mensais', fontsize=18)
     ax2.set_xlabel('Data'); ax2.set_ylabel('Valor da Carteira (R$)'); ax2.legend(loc='upper left')
     ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))
+    if config.SAVE_PLOTS:
+        fig2.savefig(os.path.join(config.PLOT_DIR, 'cenario_2_aportes_mensais.png'))
+        plt.close(fig2)
 
     # Gráfico 3: Cenário CDB Misto
-    plot_cdb_mixed_scenario(cdb_results)
+    fig3, ax3 = plt.subplots(figsize=(14, 8))
+    plot_cdb_mixed_scenario(cdb_results, ax3)
+    if config.SAVE_PLOTS:
+        fig3.savefig(os.path.join(config.PLOT_DIR, 'cenario_3_cdb_misto.png'))
+        plt.close(fig3)
 
     # Gráfico 4: Distribuição de Aportes Mensais
-    fig3, ax3 = plt.subplots(figsize=(14, 8))
+    fig4, ax4 = plt.subplots(figsize=(14, 8))
     monthly_contributions = monthly_results['Ativo Aportado'].replace("", np.nan).resample('M').first().dropna()
     
     # Processa as entradas para lidar com múltiplos tickers por aporte
@@ -72,23 +85,30 @@ def plot_results(lump_sum_results, monthly_results, cdb_results):
     
     contribution_counts = pd.Series(all_individual_contributions).value_counts()
     if not contribution_counts.empty:
-        contribution_counts.plot(kind='bar', ax=ax3, color='coral')
-        ax3.set_title('Quantidade de Aportes Mensais por Ativo', fontsize=18)
-        ax3.set_xlabel('Ativo'); ax3.set_ylabel('Número de Aportes')
-        ax3.tick_params(axis='x', rotation=90)
+        contribution_counts.plot(kind='bar', ax=ax4, color='coral')
+        ax4.set_title('Quantidade de Aportes Mensais por Ativo', fontsize=18)
+        ax4.set_xlabel('Ativo'); ax4.set_ylabel('Número de Aportes')
+        ax4.tick_params(axis='x', rotation=90)
     else:
-        ax3.text(0.5, 0.5, 'Sem dados de aporte para exibir.', horizontalalignment='center', verticalalignment='center')
-        ax3.set_title('Quantidade de Aportes Mensais por Ativo', fontsize=18)
+        ax4.text(0.5, 0.5, 'Sem dados de aporte para exibir.', horizontalalignment='center', verticalalignment='center')
+        ax4.set_title('Quantidade de Aportes Mensais por Ativo', fontsize=18)
+    if config.SAVE_PLOTS:
+        fig4.savefig(os.path.join(config.PLOT_DIR, 'distribuicao_aportes.png'))
+        plt.close(fig4)
 
     # Gráfico 5: Distribuição de Valor por Ativo
-    plot_ticker_distribution(monthly_results)
+    fig5, ax5 = plt.subplots(figsize=(14, 8))
+    plot_ticker_distribution(monthly_results, ax5)
+    if config.SAVE_PLOTS:
+        fig5.savefig(os.path.join(config.PLOT_DIR, 'distribuicao_valor.png'))
+        plt.close(fig5)
 
-    plt.tight_layout()
-    plt.show()
+    if not config.SAVE_PLOTS:
+        plt.tight_layout()
+        plt.show()
 
-def plot_cdb_mixed_scenario(results_df):
+def plot_cdb_mixed_scenario(results_df, ax):
     """Gera o gráfico para o cenário de aportes com alocação em CDB."""
-    fig, ax = plt.subplots(figsize=(14, 8))
     ax.plot(results_df.index, results_df['Total'], label='Carteira', color='blue', linewidth=2)
     if BENCHMARK_NAME in results_df and not results_df[BENCHMARK_NAME].isna().all():
         ax.plot(results_df.index, results_df[BENCHMARK_NAME], label=BENCHMARK_NAME, color='green', linestyle='--')

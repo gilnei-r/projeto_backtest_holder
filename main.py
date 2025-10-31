@@ -54,7 +54,14 @@ def main():
     data_fim = config.DATA_FIM
 
     # --- Download de Todos os Dados ---
-    data_historica = data_loader.download_stock_data(tickers_sa, data_inicio, data_fim)
+    data_historica, failed_tickers = data_loader.download_stock_data(tickers_sa, data_inicio, data_fim)
+    
+    if failed_tickers:
+        print("\n--- Tickers que falharam no download ---")
+        for ticker in failed_tickers:
+            print(ticker)
+        print("----------------------------------------")
+
     if data_historica is None:
         return # Encerra se não houver dados de ações
 
