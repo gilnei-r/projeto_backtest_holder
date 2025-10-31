@@ -4,34 +4,39 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from config import BENCHMARK_NAME
 import os
 import config
 
-def plot_ticker_distribution(monthly_results, ax):
-    """Gera um gráfico de barras com a distribuição de valor por ativo."""
-    # Pega a última linha de dados para os valores finais
-    final_values = monthly_results.iloc[-1]
+def plot_ticker_distribution(final_values, final_contributions, ax):
+    """Gera um gráfico de barras com a distribuição de valor e aporte por ativo."""
+    tickers = [col for col in final_values.index if '.SA' in col or col == 'CDB']
     
-    # Filtra para manter apenas os tickers, excluindo colunas de resumo
-    tickers = [col for col in monthly_results.columns if '.SA' in col]
-    ticker_values = final_values[tickers]
+    data = {
+        'Valor Atual': final_values[tickers],
+        'Aporte Total': final_contributions[tickers]
+    }
     
-    # Ordena os valores em ordem decrescente
-    sorted_ticker_values = ticker_values.sort_values(ascending=False)
+    df = pd.DataFrame(data).reset_index().rename(columns={'index': 'Ticker'})
+    df_melted = df.melt(id_vars='Ticker', var_name='Tipo', value_name='Valor')
     
-    if not sorted_ticker_values.empty:
-        sorted_ticker_values.plot(kind='bar', ax=ax, color='skyblue')
-        ax.set_title('Distribuição de Valor por Ativo no Final do Período', fontsize=18)
+    # Ordena o dataframe para garantir que os tickers fiquem agrupados
+    df_melted.sort_values(by='Ticker', inplace=True)
+
+    if not df_melted.empty:
+        sns.barplot(x='Ticker', y='Valor', hue='Tipo', data=df_melted, ax=ax)
+        ax.set_title('Valor Atual vs Aporte Total por Ativo', fontsize=18)
         ax.set_xlabel('Ativo')
-        ax.set_ylabel('Valor Total (R$)')
+        ax.set_ylabel('Valor (R$)')
         ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f'R$ {x:,.0f}'))
-        ax.tick_params(axis='x', rotation=45)
+        ax.tick_params(axis='x', rotation=90)
+        ax.legend(title='Tipo')
     else:
         ax.text(0.5, 0.5, 'Sem dados de valor de ticker para exibir.', horizontalalignment='center', verticalalignment='center')
         ax.set_title('Distribuição de Valor por Ativo', fontsize=18)
 
-def plot_results(lump_sum_results, monthly_results, cdb_results):
+def plot_results(lump_sum_results, monthly_results, monthly_contributions, cdb_results, cdb_contributions):
     """Gera e salva os gráficos dos resultados."""
     print("Gerando gráficos...")
     
@@ -76,11 +81,10 @@ def plot_results(lump_sum_results, monthly_results, cdb_results):
 
     # Gráfico 4: Distribuição de Aportes Mensais
     fig4, ax4 = plt.subplots(figsize=(14, 8))
-    monthly_contributions = monthly_results['Ativo Aportado'].replace("", np.nan).resample('M').first().dropna()
+    monthly_contributions_plot_data = monthly_results['Ativo Aportado'].replace("", np.nan).resample('M').first().dropna()
     
-    # Processa as entradas para lidar com múltiplos tickers por aporte
     all_individual_contributions = []
-    for contribution_group in monthly_contributions:
+    for contribution_group in monthly_contributions_plot_data:
         all_individual_contributions.extend(contribution_group.split(','))
     
     contribution_counts = pd.Series(all_individual_contributions).value_counts()
@@ -96,12 +100,19 @@ def plot_results(lump_sum_results, monthly_results, cdb_results):
         fig4.savefig(os.path.join(config.PLOT_DIR, 'distribuicao_aportes.png'))
         plt.close(fig4)
 
-    # Gráfico 5: Distribuição de Valor por Ativo
+    # Gráfico 5: Distribuição de Valor por Ativo (Cenário 2)
     fig5, ax5 = plt.subplots(figsize=(14, 8))
-    plot_ticker_distribution(monthly_results, ax5)
+    plot_ticker_distribution(monthly_results.iloc[-1], monthly_contributions.iloc[-1], ax5)
     if config.SAVE_PLOTS:
         fig5.savefig(os.path.join(config.PLOT_DIR, 'distribuicao_valor.png'))
         plt.close(fig5)
+
+    # Gráfico 6: Distribuição de Valor por Ativo (Cenário 3)
+    fig6, ax6 = plt.subplots(figsize=(14, 8))
+    plot_ticker_distribution(cdb_results.iloc[-1], cdb_contributions.iloc[-1], ax6)
+    if config.SAVE_PLOTS:
+        fig6.savefig(os.path.join(config.PLOT_DIR, 'distribuicao_valor_cdb.png'))
+        plt.close(fig6)
 
     if not config.SAVE_PLOTS:
         plt.tight_layout()

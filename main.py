@@ -17,11 +17,10 @@ import data_loader
 import scenarios
 import plotting
 
-def save_results_to_excel(lump_sum_results, monthly_results, cdb_results):
+def save_results_to_excel(lump_sum_results, monthly_results, monthly_contributions, cdb_results, cdb_contributions):
     """Salva os resultados dos backtests em arquivos Excel separados na pasta /results."""
     print("\nSalvando resultados em Excel...")
     
-    # Garante que o diretório de resultados exista
     if not os.path.exists('results'):
         os.makedirs('results')
         
@@ -36,10 +35,12 @@ def save_results_to_excel(lump_sum_results, monthly_results, cdb_results):
 
         with pd.ExcelWriter(path_monthly) as writer:
             monthly_results.resample('M').last().to_excel(writer, sheet_name='Aportes Mensais (Mensal)')
+            monthly_contributions.iloc[[-1]].to_excel(writer, sheet_name='Aportes Acumulados')
         print(f"Resultados dos Aportes Mensais salvos em '{path_monthly}'")
 
         with pd.ExcelWriter(path_cdb) as writer:
             cdb_results.resample('M').last().to_excel(writer, sheet_name='Aportes CDB Misto (Mensal)')
+            cdb_contributions.iloc[[-1]].to_excel(writer, sheet_name='Aportes Acumulados')
         print(f"Resultados dos Aportes CDB Misto salvos em '{path_cdb}'")
     except Exception as e:
         print(f"ERRO ao salvar resultados em Excel: {e}")
@@ -48,12 +49,10 @@ def main():
     """Função principal que orquestra o processo de backtest."""
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
-    # Carrega configuração
     tickers_sa = config.TICKERS_EMPRESAS
     data_inicio = config.DATA_INICIO
     data_fim = config.DATA_FIM
 
-    # --- Download de Todos os Dados ---
     data_historica, failed_tickers = data_loader.download_stock_data(tickers_sa, data_inicio, data_fim)
     
     if failed_tickers:
@@ -63,24 +62,20 @@ def main():
         print("----------------------------------------")
 
     if data_historica is None:
-        return # Encerra se não houver dados de ações
+        return
 
     benchmark_df = data_loader.get_benchmark_data(data_inicio, data_fim)
     ipca_df = data_loader.get_ipca_data(data_inicio, data_fim)
 
-    # --- Preparação dos Dados de Benchmark ---
     benchmark_diaria, ipca_mensal = data_loader.prepare_benchmark_data(benchmark_df, ipca_df)
 
-    # --- Execução dos Cenários de Backtest ---
     lump_sum_results = scenarios.run_lump_sum_backtest(data_historica, benchmark_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
-    monthly_results = scenarios.run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
-    cdb_results = scenarios.run_scenario_cdb_mixed(data_inicio, data_fim, config.APORTE_MENSAL_BASE, data_historica, benchmark_diaria, ipca_mensal, config.CDB_PERCENTAGE)
+    monthly_results, monthly_contributions = scenarios.run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_mensal, tickers_sa, data_inicio, data_fim)
+    cdb_results, cdb_contributions = scenarios.run_scenario_cdb_mixed(data_inicio, data_fim, config.APORTE_MENSAL_BASE, data_historica, benchmark_diaria, ipca_mensal, config.CDB_PERCENTAGE)
 
-    # --- Salvamento e Visualização ---
     if lump_sum_results is not None and monthly_results is not None and cdb_results is not None:
-        save_results_to_excel(lump_sum_results, monthly_results, cdb_results)
-        # A função de plotagem precisará ser atualizada para lidar com o novo resultado
-        plotting.plot_results(lump_sum_results, monthly_results, cdb_results)
+        save_results_to_excel(lump_sum_results, monthly_results, monthly_contributions, cdb_results, cdb_contributions)
+        plotting.plot_results(lump_sum_results, monthly_results, monthly_contributions, cdb_results, cdb_contributions)
     else:
         print("\nAVISO: Nenhum resultado foi gerado. Gráficos e salvamento em Excel foram ignorados.")
 

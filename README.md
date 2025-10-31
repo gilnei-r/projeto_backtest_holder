@@ -51,7 +51,19 @@ O script executará ambos os cenários sequencialmente e exibirá quatro janelas
 
 ## Configuração
 
-Todos os parâmetros para o backtest (tickers de ações, valores de investimento, datas) são definidos no arquivo `config.py`. Isso inclui novas configurações para habilitar e ajustar o recurso de freio de arrumação (`FREIO_ATIVO`, `FREIO_PERIODO_APORTES`, `FREIO_QUARENTENA_INICIAL`, `FREIO_QUARENTENA_ADICIONAL`) e o benchmark de IPCA (`IPCA_BENCHMARK_X`). Para executar diferentes cenários, você precisará modificar as variáveis neste arquivo diretamente.
+Todos os parâmetros para o backtest (tickers de ações, valores de investimento, datas) são definidos no arquivo `config.py`. Isso inclui novas configurações para habilitar e ajustar o recurso de freio de arrumação (`FREIO_ATIVO`, `FREIO_PERIODO_APORTES`, `FREIO_QUARENTENA_INICIAL`, `FREIO_QUARENTENA_ADICIONAL`) e o benchmark de IPCA (`IPCA_BENCHMARK_X`).
+
+### Fonte de Dados
+
+É possível configurar a fonte dos dados históricos no `config.py`:
+
+- `DATA_SOURCE`: Define o provedor de dados. As opções são:
+  - `'yahoofinance'` (padrão): Baixa os dados do Yahoo Finance.
+  - `'metatrader5'`: Utiliza uma instância em execução do MetaTrader 5.
+  - `'metastock'`: Lê os dados de arquivos `.csv` locais.
+- `METASTOCK_PATH`: Se `DATA_SOURCE` for `'metastock'`, esta variável deve conter o caminho absoluto para a pasta onde os arquivos `.csv` de cada ativo estão localizados.
+
+Para executar diferentes cenários, você precisará modificar as variáveis neste arquivo diretamente.
 
 ## Saída
 

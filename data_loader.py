@@ -132,11 +132,8 @@ def get_benchmark_data(start_date, end_date):
         print(f"Novos dados de {BENCHMARK_NAME} salvos em '{file_path}'.")
     return benchmark_df
 
-def download_stock_data(tickers, start_date, end_date):
-    """Baixa dados históricos de ações, com cache para cada ticker individualmente."""
-    print("--- VERIFICANDO DADOS DE AÇÕES ---")
-    os.makedirs('data', exist_ok=True)
-    
+def _load_from_yfinance(tickers, start_date, end_date):
+    """Baixa dados do yfinance."""
     all_data = {}
     failed_tickers = []
 
@@ -150,44 +147,110 @@ def download_stock_data(tickers, start_date, end_date):
         else:
             print(f"Baixando novos dados para {ticker} via yfinance...")
             try:
-                ticker_data = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False, multi_level_index=False)
+                ticker_data = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
                 if ticker_data.empty:
                     print(f"AVISO: Nenhum dado baixado para {ticker} via yfinance.")
                     ticker_data = None
+                else:
+                    ticker_data.to_csv(file_path)
+                    print(f"Novos dados para {ticker} salvos em '{file_path}'.")
             except Exception as e:
                 print(f"ERRO ao baixar dados para {ticker} via yfinance: {e}")
                 ticker_data = None
 
-            if ticker_data is None and config.USE_MT5:
-                mt5_ticker = ticker.replace('.SA', '')
-                print(f"Tentando baixar {mt5_ticker} via MetaTrader 5...")
-                ticker_data = download_mt5_data(mt5_ticker, start_date, end_date)
-
-            if ticker_data is not None and not ticker_data.empty:
-                ticker_data.to_csv(file_path)
-                print(f"Novos dados para {ticker} salvos em '{file_path}'.")
-            else:
-                failed_tickers.append(ticker)
-                continue
-
         if ticker_data is not None:
-            all_data[ticker] = ticker_data
+            all_data[ticker] = ticker_data['Adj Close']
+        else:
+            failed_tickers.append(ticker)
+
+    return all_data, failed_tickers
+
+def _load_from_metastock(tickers, path):
+    """Carrega dados de arquivos CSV locais (formato Metastock)."""
+    if not os.path.isdir(path):
+        raise FileNotFoundError(f"O caminho para o Metastock não foi encontrado: {path}")
+
+    all_data = {}
+    failed_tickers = []
+
+    for ticker in tickers:
+        # Remove o sufixo .SA para corresponder aos nomes de arquivo locais
+        local_ticker = ticker.replace('.SA', '')
+        file_path = os.path.join(path, f"{local_ticker}.csv")
+
+        if not os.path.exists(file_path):
+            print(f"AVISO: Arquivo não encontrado para {ticker} em {file_path}. Pulando.")
+            failed_tickers.append(ticker)
+            continue
+
+        try:
+            print(f"Carregando dados para {ticker} de '{file_path}'.")
+            ticker_data = pd.read_csv(file_path, index_col='Date', parse_dates=True)
+            
+            if 'Adj Close' not in ticker_data.columns:
+                 print(f"AVISO: Coluna 'Adj Close' não encontrada em {file_path} para {ticker}. Pulando.")
+                 failed_tickers.append(ticker)
+                 continue
+
+            all_data[ticker] = ticker_data['Adj Close']
+        except Exception as e:
+            print(f"ERRO ao carregar dados para {ticker} de {file_path}: {e}")
+            failed_tickers.append(ticker)
+
+    return all_data, failed_tickers
+
+def _load_from_mt5(tickers, start_date, end_date):
+    """Baixa dados exclusivamente do MetaTrader 5."""
+    all_data = {}
+    failed_tickers = []
+
+    if not connect_mt5():
+        return {}, tickers
+
+    for ticker in tickers:
+        mt5_ticker = ticker.replace('.SA', '')
+        print(f"Baixando {mt5_ticker} via MetaTrader 5...")
+        ticker_data = download_mt5_data(mt5_ticker, start_date, end_date)
+
+        if ticker_data is not None and not ticker_data.empty:
+            # O MT5 não fornece 'Adj Close', usamos 'Close'
+            all_data[ticker] = ticker_data['Close']
+        else:
+            failed_tickers.append(ticker)
+    
+    mt5.shutdown()
+    return all_data, failed_tickers
+
+def download_stock_data(tickers, start_date, end_date):
+    """
+    Baixa ou carrega dados históricos de ações de diferentes fontes,
+    com cache para cada ticker individualmente.
+    """
+    print("--- VERIFICANDO DADOS DE AÇÕES ---")
+    os.makedirs('data', exist_ok=True)
+
+    all_data = {}
+    failed_tickers = []
+
+    if config.DATA_SOURCE == 'yahoofinance':
+        all_data, failed_tickers = _load_from_yfinance(tickers, start_date, end_date)
+    elif config.DATA_SOURCE == 'metatrader5':
+        all_data, failed_tickers = _load_from_mt5(tickers, start_date, end_date)
+    elif config.DATA_SOURCE == 'metastock':
+        all_data, failed_tickers = _load_from_metastock(tickers, config.METASTOCK_PATH)
+    else:
+        raise ValueError(f"Fonte de dados desconhecida: {config.DATA_SOURCE}")
 
     if not all_data:
         print("ERRO CRÍTICO: Falha ao carregar dados para todos os tickers.")
         return None, failed_tickers
 
-    # Combina os dados de todos os tickers em um único DataFrame com colunas MultiIndex
-    data_historica = pd.concat(all_data.values(), keys=all_data.keys(), axis=1)
+    master_df = pd.concat(all_data.values(), axis=1, keys=all_data.keys())
+    master_df.columns.name = 'Ticker'
+    master_df.ffill(inplace=True)
 
-    # Inverte os níveis do MultiIndex para ter (metric, ticker) ao invés de (ticker, metric)
-    data_historica.columns = data_historica.columns.swaplevel(0, 1)
-    data_historica.sort_index(axis=1, inplace=True)
-
-    # Garante que o preenchimento de dados ausentes seja sempre executado
-    data_historica.ffill(inplace=True)
     print("Dados de ações carregados e processados.")
-    return data_historica, failed_tickers
+    return master_df, failed_tickers
 
 def prepare_benchmark_data(benchmark_df, ipca_df):
     """Prepara os dados de benchmark (CDI/Selic e IPCA)."""

@@ -44,7 +44,7 @@ TICKERS_EMPRESAS = [
 ]
 
 # Data de início do backtest no formato "AAAA-MM-DD".
-DATA_INICIO = "2015-01-01"
+DATA_INICIO = "2025-01-01"
 
 # Data de fim do backtest. Por padrão, usa a data de hoje.
 DATA_FIM = datetime.today().strftime('%Y-%m-%d')
@@ -52,6 +52,15 @@ DATA_FIM = datetime.today().strftime('%Y-%m-%d')
 # Frequência (em dias) para verificar a necessidade de baixar novos dados.
 # Se o arquivo de dados for mais antigo que este número de dias, um novo download será feito.
 DATA_UPDATE_DAYS = 1
+
+
+# --- Configuração da Fonte de Dados ---
+
+# Escolha a fonte de dados: 'yahoofinance', 'metatrader5', 'metastock'
+DATA_SOURCE = 'metatrader5'
+
+# Caminho para a pasta com os arquivos CSV do Metastock (usado apenas se DATA_SOURCE for 'metastock')
+METASTOCK_PATH = 'C:\\Users\\seu_usuario\\caminho\\para\\os\\csvs'
 
 
 # --- Configuração de Benchmarks ---

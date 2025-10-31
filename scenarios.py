@@ -65,22 +65,21 @@ def run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_me
         print("Freio automático de aportes ATIVADO.")
 
     all_dates = pd.date_range(start=data_inicio, end=data_fim, freq='D')
-    valid_tickers = [col for col in tickers_sa if col in data_historica['Close'].columns and not data_historica['Close'][col].dropna().empty]
+    valid_tickers = [col for col in tickers_sa if col in data_historica.columns and not data_historica[col].dropna().empty]
     
-    # Correção: Inicia colunas 'Aporte' e 'Ativo Aportado' com NaN para permitir o preenchimento (ffill)
     columns_to_initialize_zero = valid_tickers + ['Total', config.BENCHMARK_NAME, 'Total Investido']
     portfolio_mensal = pd.DataFrame(0.0, index=all_dates, columns=columns_to_initialize_zero)
+    df_aportes = pd.DataFrame(0.0, index=all_dates, columns=valid_tickers)
+
     portfolio_mensal['Aporte'] = np.nan
     portfolio_mensal['Ativo Aportado'] = np.nan
 
     num_shares = {ticker: 0.0 for ticker in valid_tickers}
     ipca_acumulado = (1 + ipca_mensal).cumprod().reindex(all_dates, method='ffill').fillna(1) if ipca_mensal is not None else pd.Series(1, index=all_dates)
 
-    # --- Variáveis para o Freio Automático ---
     aportes_recentes = {ticker: [] for ticker in valid_tickers}
     quarentena = {ticker: None for ticker in valid_tickers}
     quarentena_duracao = {ticker: config.FREIO_QUARENTENA_INICIAL for ticker in valid_tickers}
-    # -----------------------------------------
 
     valor_selic = 0.0
     total_investido = 0.0
@@ -90,10 +89,9 @@ def run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_me
     for dia in all_dates:
         if dia not in data_historica.index:
             if dia > all_dates[0]:
-                # Forward-fill: propaga valores do dia anterior para dias sem negociação
                 for ticker in valid_tickers:
-                    portfolio_mensal.loc[dia, ticker] = portfolio_mensal.loc[:dia, ticker].iloc[-2] if len(portfolio_mensal.loc[:dia, ticker]) > 1 else 0
-                portfolio_mensal.loc[dia, 'Total'] = portfolio_mensal.loc[:dia, 'Total'].iloc[-2] if len(portfolio_mensal.loc[:dia, 'Total']) > 1 else 0
+                    portfolio_mensal.loc[dia, ticker] = portfolio_mensal.loc[dia - pd.Timedelta(days=1), ticker]
+                portfolio_mensal.loc[dia, 'Total'] = portfolio_mensal.loc[dia - pd.Timedelta(days=1), 'Total']
                 portfolio_mensal.loc[dia, config.BENCHMARK_NAME] = valor_selic
                 portfolio_mensal.loc[dia, 'Total Investido'] = total_investido
             continue
@@ -107,72 +105,44 @@ def run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_me
 
             portfolio_mensal.loc[dia, 'Aporte'] = aporte_corrigido
 
-            # --- Lógica do Freio Automático ---
             ativos_elegiveis = valid_tickers
             if config.FREIO_ATIVO:
-                # Libera ativos da quarentena se a data já passou
                 for ticker in quarentena:
                     if quarentena[ticker] is not None and dia >= quarentena[ticker]:
                         quarentena[ticker] = None
                         print(f"  FREIO DESATIVADO para {ticker} em {dia.strftime('%Y-%m-%d')}.")
 
-                ativos_elegiveis = [
-                    ticker for ticker in valid_tickers if quarentena[ticker] is None
-                ]
-                # Se todos estiverem em quarentena, não aporta em ninguém.
+                ativos_elegiveis = [ticker for ticker in valid_tickers if quarentena[ticker] is None]
                 if not ativos_elegiveis:
                     ativos_elegiveis = []
 
-
-            valores_ativos = {
-                ticker: num_shares[ticker] * data_historica.loc[dia, ('Close', ticker)]
-                for ticker in ativos_elegiveis
-                if pd.notna(data_historica.loc[dia, ('Close', ticker)])
-            }
-            # ------------------------------------
+            valores_ativos = {ticker: num_shares[ticker] * data_historica.loc[dia, ticker] for ticker in ativos_elegiveis if pd.notna(data_historica.loc[dia, ticker])}
 
             if valores_ativos:
-                # --- Lógica de Seleção e Aporte Dividido ---
-                
-                # Ordena os ativos elegíveis pelo seu valor total em carteira (do menor para o maior)
                 ativos_ordenados = sorted(valores_ativos, key=valores_ativos.get)
-                
-                # Seleciona os 'n' primeiros, ou menos se não houver 'n' ativos elegíveis
                 num_a_selecionar = config.NUMERO_EMPRESAS_POR_APORTE
                 ativos_selecionados = ativos_ordenados[:num_a_selecionar]
 
                 if ativos_selecionados:
-                    # Divide o aporte igualmente entre os ativos selecionados
                     aporte_por_ativo = aporte_corrigido / len(ativos_selecionados)
-                    
-                    # Registra os tickers que receberão aporte
                     portfolio_mensal.loc[dia, 'Ativo Aportado'] = ",".join(ativos_selecionados)
 
-                    # Itera sobre os ativos selecionados para fazer o aporte e aplicar o freio
                     for ticker in ativos_selecionados:
-                        preco = data_historica.loc[dia, ('Close', ticker)]
+                        preco = data_historica.loc[dia, ticker]
                         if pd.notna(preco) and preco > 0:
                             num_shares[ticker] += aporte_por_ativo / preco
+                            df_aportes.loc[dia, ticker] = aporte_por_ativo
 
-                        # --- Lógica de Gatilho do Freio (aplicada individualmente) ---
                         if config.FREIO_ATIVO:
                             aportes_recentes[ticker].append(dia)
-                            
-                            # Remove aportes mais antigos que o período de verificação
                             limite_tempo = dia - pd.DateOffset(months=config.FREIO_PERIODO_APORTES)
-                            aportes_recentes[ticker] = [
-                                d for d in aportes_recentes[ticker] if d >= limite_tempo
-                            ]
+                            aportes_recentes[ticker] = [d for d in aportes_recentes[ticker] if d >= limite_tempo]
 
                             if len(aportes_recentes[ticker]) > 1:
                                 print(f"  FREIO ATIVADO para {ticker} em {dia.strftime('%Y-%m-%d')}.")
-                                
-                                # Define a data de fim da quarentena
                                 fim_quarentena = dia + pd.DateOffset(months=quarentena_duracao[ticker])
                                 quarentena[ticker] = fim_quarentena
                                 print(f"  Ativo em quarentena até {fim_quarentena.strftime('%Y-%m-%d')}.")
-
-                                # Aumenta a próxima duração da quarentena para este ativo
                                 quarentena_duracao[ticker] += config.FREIO_QUARENTENA_ADICIONAL
         
         if benchmark_diaria is not None and dia in benchmark_diaria.index:
@@ -180,9 +150,9 @@ def run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_me
 
         valor_total_dia = 0
         for ticker in valid_tickers:
-            if pd.notna(data_historica.loc[dia, ('Close', ticker)]):
-                preco_dia = data_historica.loc[dia, ('Close', ticker)]
-                if ('Dividends', ticker) in data_historica.columns and pd.notna(data_historica.loc[dia, ('Dividends', ticker)]) and data_historica.loc[dia, ('Dividends', ticker)] > 0:
+            if pd.notna(data_historica.loc[dia, ticker]):
+                preco_dia = data_historica.loc[dia, ticker]
+                if 'Dividends' in data_historica.columns and pd.notna(data_historica.loc[dia, ('Dividends', ticker)]) and data_historica.loc[dia, ('Dividends', ticker)] > 0:
                     num_shares[ticker] += (num_shares[ticker] * data_historica.loc[dia, ('Dividends', ticker)]) / preco_dia
                 valor_ativo = num_shares[ticker] * preco_dia
                 portfolio_mensal.loc[dia, ticker] = valor_ativo
@@ -193,6 +163,8 @@ def run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_me
         portfolio_mensal.loc[dia, 'Total Investido'] = total_investido
 
     portfolio_mensal.ffill(inplace=True)
+    df_aportes_acumulados = df_aportes.cumsum()
+
     portfolio_mensal = calculate_ipca_benchmark(portfolio_mensal, ipca_mensal, portfolio_mensal['Total Investido'])
 
     valor_final_carteira_m = portfolio_mensal['Total'].iloc[-1]
@@ -210,7 +182,7 @@ def run_monthly_contributions_backtest(data_historica, benchmark_diaria, ipca_me
         print(f"Carteira: R$ {valor_final_carteira_m:,.2f}")
         print("AVISO: Nenhum aporte foi processado.")
 
-    return portfolio_mensal
+    return portfolio_mensal, df_aportes_acumulados
 
 def calculate_ipca_benchmark(portfolio_df, ipca_mensal, initial_investment):
     """Calcula o benchmark IPCA + X% e o adiciona ao dataframe do portfólio."""
@@ -254,12 +226,14 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
     print("\n\n--- CENÁRIO 3: APORTES MENSAIS COM ALOCAÇÃO EM CDB ---")
 
     all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
-    valid_tickers = [col for col in config.TICKERS_EMPRESAS if col in portfolio_data['Close'].columns and not portfolio_data['Close'][col].dropna().empty]
+    valid_tickers = [col for col in config.TICKERS_EMPRESAS if col in portfolio_data.columns and not portfolio_data[col].dropna().empty]
     
     columns = valid_tickers + ['CDB', 'Total', config.BENCHMARK_NAME, 'Total Investido']
     results_df = pd.DataFrame(0.0, index=all_dates, columns=columns)
+    df_aportes = pd.DataFrame(0.0, index=all_dates, columns=valid_tickers + ['CDB'])
+
     results_df['Aporte'] = np.nan
-    results_df['Ativo Aportado'] = pd.NA  # Initialize with pandas NA to allow proper string handling
+    results_df['Ativo Aportado'] = pd.NA
 
     num_shares = {ticker: 0.0 for ticker in valid_tickers}
     cdb_value = 0.0
@@ -267,17 +241,14 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
     valor_selic_benchmark = 0.0
     last_month_processed = None
 
-    # --- Variáveis para o Freio Automático (Cenário 3) ---
     aportes_recentes = {ticker: [] for ticker in valid_tickers}
     quarentena = {ticker: None for ticker in valid_tickers}
     quarentena_duracao = {ticker: config.FREIO_QUARENTENA_INICIAL for ticker in valid_tickers}
-    # ----------------------------------------------------
 
     ipca_acumulado = (1 + ipca_data).cumprod().reindex(all_dates, method='ffill').fillna(1) if ipca_data is not None else pd.Series(1, index=all_dates)
 
     print("Processando backtest com aportes mensais e alocação em CDB...")
     for dia in all_dates:
-        # Apply daily interest to CDB and benchmark at the beginning of the day
         if benchmark_data is not None and dia in benchmark_data.index:
             cdb_value *= benchmark_data.loc[dia]
             valor_selic_benchmark *= benchmark_data.loc[dia]
@@ -300,31 +271,27 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
             valor_selic_benchmark += aporte_corrigido
             results_df.loc[dia, 'Aporte'] = aporte_corrigido
 
-            total_portfolio_value = sum(num_shares[ticker] * portfolio_data.loc[dia, ('Close', ticker)] for ticker in valid_tickers if pd.notna(portfolio_data.loc[dia, ('Close', ticker)])) + cdb_value
+            total_portfolio_value = sum(num_shares[ticker] * portfolio_data.loc[dia, ticker] for ticker in valid_tickers if pd.notna(portfolio_data.loc[dia, ticker])) + cdb_value
 
-            # Lógica de alocação
             if (total_portfolio_value > 0 and (cdb_value / total_portfolio_value) < cdb_percentage) or total_portfolio_value == 0:
                 cdb_value += aporte_corrigido
+                df_aportes.loc[dia, 'CDB'] = aporte_corrigido
                 results_df.loc[dia, 'Ativo Aportado'] = 'CDB'
             else:
-                valores_ativos = {
-                    ticker: num_shares[ticker] * portfolio_data.loc[dia, ('Close', ticker)]
-                    for ticker in valid_tickers
-                    if pd.notna(portfolio_data.loc[dia, ('Close', ticker)])
-                }
+                valores_ativos = {ticker: num_shares[ticker] * portfolio_data.loc[dia, ticker] for ticker in valid_tickers if pd.notna(portfolio_data.loc[dia, ticker])}
                 if valores_ativos:
                     ativo_menor_valor = min(valores_ativos, key=valores_ativos.get)
-                    preco = portfolio_data.loc[dia, ('Close', ativo_menor_valor)]
+                    preco = portfolio_data.loc[dia, ativo_menor_valor]
                     if pd.notna(preco) and preco > 0:
                         num_shares[ativo_menor_valor] += aporte_corrigido / preco
+                        df_aportes.loc[dia, ativo_menor_valor] = aporte_corrigido
                         results_df.loc[dia, 'Ativo Aportado'] = ativo_menor_valor
 
-        # Atualiza valores diários do portfólio
         valor_total_dia = 0
         for ticker in valid_tickers:
-            if pd.notna(portfolio_data.loc[dia, ('Close', ticker)]):
-                preco_dia = portfolio_data.loc[dia, ('Close', ticker)]
-                if ('Dividends', ticker) in portfolio_data.columns and pd.notna(portfolio_data.loc[dia, ('Dividends', ticker)]) and portfolio_data.loc[dia, ('Dividends', ticker)] > 0:
+            if pd.notna(portfolio_data.loc[dia, ticker]):
+                preco_dia = portfolio_data.loc[dia, ticker]
+                if 'Dividends' in portfolio_data.columns and pd.notna(portfolio_data.loc[dia, ('Dividends', ticker)]) and portfolio_data.loc[dia, ('Dividends', ticker)] > 0:
                     num_shares[ticker] += (num_shares[ticker] * portfolio_data.loc[dia, ('Dividends', ticker)]) / preco_dia
                 valor_ativo = num_shares[ticker] * preco_dia
                 results_df.loc[dia, ticker] = valor_ativo
@@ -336,12 +303,12 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
         results_df.loc[dia, config.BENCHMARK_NAME] = valor_selic_benchmark
         results_df.loc[dia, 'Total Investido'] = total_investido
 
-    # Forward-fill numeric columns but not contribution tracking columns
     numeric_cols = valid_tickers + ['CDB', 'Total', config.BENCHMARK_NAME, 'Total Investido']
     results_df[numeric_cols] = results_df[numeric_cols].ffill()
+    df_aportes_acumulados = df_aportes.cumsum()
+
     results_df = calculate_ipca_benchmark(results_df, ipca_data, results_df['Total Investido'])
     
-    # Resultados finais
     valor_final_carteira = results_df['Total'].iloc[-1]
     total_investido_final = results_df['Total Investido'].iloc[-1]
     anos = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days / 365.25
@@ -356,4 +323,4 @@ def run_scenario_cdb_mixed(start_date, end_date, monthly_contribution, portfolio
     else:
         print(f"Carteira: R$ {valor_final_carteira:,.2f}")
 
-    return results_df
+    return results_df, df_aportes_acumulados
