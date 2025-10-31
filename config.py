@@ -91,10 +91,28 @@ NUMERO_EMPRESAS_POR_APORTE = 2
 
 # --- Configuração de Saída ---
 
+# Salvar os gráficos em arquivos PNG em vez de exibi-los na tela.
+SAVE_PLOTS = True
+
+# Diretório para salvar os gráficos.
+PLOT_DIR = "results/plots/"
+
 # Nomes dos arquivos de saída para os resultados em Excel.
 ARQUIVO_RESULTADOS_APORTE_UNICO = "backtest_results_lump_sum.xlsx"
 ARQUIVO_RESULTADOS_APORTES_MENSAIS = "backtest_results_monthly.xlsx"
 ARQUIVO_RESULTADOS_APORTES_CDB = "backtest_results_cdb_mixed.xlsx"
+
+
+# --- Configuração do MetaTrader 5 ---
+
+# Ativar o MetaTrader 5 como provedor de dados de fallback.
+USE_MT5 = True
+
+# Timeout em segundos para a conexão com o MetaTrader 5.
+MT5_TIMEOUT = 10
+
+# Número de tentativas de conexão com o MetaTrader 5.
+MT5_RETRIES = 3
 
 
 # --- Configuração do Freio Automático (Cenário 2) ---
